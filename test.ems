@@ -1,0 +1,67 @@
+## EmotionScript Test File
+## Testing all token types
+
+#* Multi-line comment
+   testing comment block *#
+
+mind MainProgram
+awake
+
+    ## Variable declarations
+    count age;
+    measure temperature;
+    truth isHappy;
+    words message;
+    emotion feeling;
+    level intensity;
+    
+    ## Assignments
+    set age -> 25;
+    set temperature -> 36.5;
+    set isHappy -> yes;
+    set message -> "Hello World";
+    
+    ## Arithmetic operations
+    set age -> age + 1;
+    set age -> age - 1;
+    set age -> age * 2;
+    set age -> age / 2;
+    set age -> age % 3;
+    
+    ## Increment/Decrement
+    age++;
+    age--;
+    
+    ## Comparisons
+    if_feel age == 25
+        speak("Age is 25");
+    else_if_feel age > 25
+        speak("Age is greater");
+    else_feel
+        speak("Age is less");
+    end_feel
+    
+    ## Functions
+    interpret calculateSum(count x, count y) yields count
+        reflect x + y;
+    end_interpret
+    
+    invoke calculateSum(10, 20);
+    
+    ## Loops
+    ruminate age < 30
+        age++;
+        speak("Looping");
+    end_ruminate
+    
+    ## Math functions
+    set temperature -> sine(3.14);
+    set temperature -> cosine(1.57);
+    
+    ## Persona
+    persona Happy evolves_from Neutral
+        manifest
+            thought positivity;
+    end_persona
+
+sleep

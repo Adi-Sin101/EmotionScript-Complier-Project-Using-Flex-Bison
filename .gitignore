@@ -1,0 +1,29 @@
+# Ignore compiled files
+*.exe
+*.o
+*.out
+
+# Ignore flex/bison generated files
+lex.yy.c
+lex.yy.cc
+y.tab.c
+y.tab.h
+
+# Ignore IDE/Editor files
+.vscode/
+.vs/
+*.swp
+*.swo
+*~
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore build directories
+.dist/
+build/
+bin/
+
+# Keep token output for reference (comment out if you want to ignore it)
+# token.out
