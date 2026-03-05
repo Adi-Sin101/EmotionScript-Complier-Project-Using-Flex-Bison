@@ -6,8 +6,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* For standalone lexer mode */
+#ifndef BISON_MODE
 #define EMIT(tok)        fprintf(yyout, "%s\n", tok)
 #define EMIT_VAL(tok,v)  fprintf(yyout, "%s %s\n", tok, v)
+#else
+/* For Bison parser mode */
+#include "emotionscript.tab.h"
+#define EMIT(tok)        return tok
+#define EMIT_VAL(tok,v)  do { yylval.string_val = strdup(yytext); return tok; } while(0)
+#endif
 
 void lexical_error(const char* msg) {
     fprintf(yyout, "LEXICAL_ERROR at line %d: %s\n", yylineno, msg);
@@ -32,128 +40,142 @@ FLOAT_LITERAL   {DIGIT}+"."{DIGIT}+
 [ \t\r\n]+              { }
 
 
-"mind"                  { EMIT("TOKEN_MIND"); }
-"awake"                 { EMIT("TOKEN_AWAKE"); }
-"sleep"                 { EMIT("TOKEN_SLEEP"); }
+"mind"                  { EMIT("PROGRAM_MIND"); }
+"awake"                 { EMIT("PROGRAM_AWAKE"); }
+"sleep"                 { EMIT("PROGRAM_SLEEP"); }
 
 
-"abort"                 { EMIT("TOKEN_ABORT"); }
-"scene"                 { EMIT("TOKEN_SCENE"); }
+"abort"                 { EMIT("PROGRAM_ABORT"); }
+"scene"                 { EMIT("PROGRAM_SCENE"); }
 
 
-"count"                 { EMIT("TOKEN_TYPE_COUNT"); }
-"measure"               { EMIT("TOKEN_TYPE_MEASURE"); }
-"level"                 { EMIT("TOKEN_TYPE_LEVEL"); }
-"truth"                 { EMIT("TOKEN_TYPE_TRUTH"); }
-"words"                 { EMIT("TOKEN_TYPE_WORDS"); }
-"emotion"               { EMIT("TOKEN_TYPE_EMOTION"); }
+"count"                 { EMIT("TYPE_COUNT"); }
+"measure"               { EMIT("TYPE_MEASURE"); }
+"level"                 { EMIT("TYPE_LEVEL"); }
+"truth"                 { EMIT("TYPE_TRUTH"); }
+"words"                 { EMIT("TYPE_WORDS"); }
+"emotion"               { EMIT("TYPE_EMOTION"); }
 
 
-"thought"               { EMIT("TOKEN_THOUGHT"); }
-"memory"                { EMIT("TOKEN_MEMORY"); }
-"trait"                 { EMIT("TOKEN_TRAIT"); }
-"state"                 { EMIT("TOKEN_STATE"); }
-"set"                   { EMIT("TOKEN_SET"); }
+"thought"               { EMIT("VAR_THOUGHT"); }
+"memory"                { EMIT("VAR_MEMORY"); }
+"trait"                 { EMIT("VAR_TRAIT"); }
+"state"                 { EMIT("VAR_STATE"); }
+"set"                   { EMIT("ASSIGN_SET"); }
 
 
-"speak"                 { EMIT("TOKEN_SPEAK"); }
-"listen"                { EMIT("TOKEN_LISTEN"); }
-"alert"                 { EMIT("TOKEN_ALERT"); }
+"speak"                 { EMIT("IO_SPEAK"); }
+"listen"                { EMIT("IO_LISTEN"); }
+"alert"                 { EMIT("IO_ALERT"); }
 
 
-"yes"                   { EMIT("TOKEN_TRUTH_LITERAL"); }
-"no"                    { EMIT("TOKEN_TRUTH_LITERAL"); }
+"yes"                   { EMIT("LIT_BOOL"); }
+"no"                    { EMIT("LIT_BOOL"); }
 
 
-"interpret"      { EMIT("TOKEN_INTERPRET"); }
-"end_interpret"  { EMIT("TOKEN_END_INTERPRET"); }
-"yields"         { EMIT("TOKEN_YIELDS"); }
-"reflect"        { EMIT("TOKEN_REFLECT"); }
-"invoke"         { EMIT("TOKEN_INVOKE"); }
+"interpret"      { EMIT("FUNC_DECLARE"); }
+"end_interpret"  { EMIT("FUNC_END"); }
+"yields"         { EMIT("FUNC_RETURNS"); }
+"reflect"        { EMIT("FUNC_RETURN"); }
+"invoke"         { EMIT("FUNC_CALL"); }
 
 
-"if_feel"        { EMIT("TOKEN_IF_FEEL"); }
-"else_if_feel"   { EMIT("TOKEN_ELSE_IF_FEEL"); }
-"else_feel"      { EMIT("TOKEN_ELSE_FEEL"); }
-"end_feel"       { EMIT("TOKEN_END_FEEL"); }
-"decide"         { EMIT("TOKEN_DECIDE"); }
-"otherwise"      { EMIT("TOKEN_OTHERWISE"); }
+"if_feel"        { EMIT("COND_IF"); }
+"else_if_feel"   { EMIT("COND_ELSE_IF"); }
+"else_feel"      { EMIT("COND_ELSE"); }
+"end_feel"       { EMIT("COND_END"); }
+"decide"         { EMIT("COND_SWITCH"); }
+"otherwise"      { EMIT("COND_DEFAULT"); }
 
-"ruminate"       { EMIT("TOKEN_RUMINATE"); }
-"end_ruminate"   { EMIT("TOKEN_END_RUMINATE"); }
-"replay"         { EMIT("TOKEN_REPLAY"); }
-"break_free"     { EMIT("TOKEN_BREAK_FREE"); }
-"continue_flow"  { EMIT("TOKEN_CONTINUE_FLOW"); }
+"decide"         { EMIT("DECIDE_KW"); }
+"when"           { EMIT("WHEN_KW"); }
+"otherwise"      { EMIT("OTHERWISE_KW"); }
+"end_decision"   { EMIT("END_DECISION_KW"); }
 
+"ruminate"       { EMIT("LOOP_WHILE"); }
+"end_ruminate"   { EMIT("LOOP_END"); }
 
-"composed_of"        { EMIT("TOKEN_COMPOSED_OF"); }
-"trigger"            { EMIT("TOKEN_TRIGGER"); }
-"current_emotion"    { EMIT("TOKEN_CURRENT_EMOTION"); }
-"transition"         { EMIT("TOKEN_TRANSITION"); }
-"when"               { EMIT("TOKEN_WHEN"); }
-
-
-"persona"        { EMIT("TOKEN_PERSONA"); }
-"end_persona"   { EMIT("TOKEN_END_PERSONAE"); }
-"manifest"       { EMIT("TOKEN_MANIFEST"); }
-"open"           { EMIT("TOKEN_OPEN"); }
-"guarded"        { EMIT("TOKEN_GUARDED"); }
-"shared"         { EMIT("TOKEN_SHARED"); }
-"evolves_from"   { EMIT("TOKEN_EVOLVES_FROM"); }
-"reshape"        { EMIT("TOKEN_RESHAPE"); }
+"while_feeling"  { EMIT("WHILE_FEELING_KW"); }
+"calm"           { EMIT("CALM_KW"); }
+"replay"         { EMIT("LOOP_FOR"); }
+"break_free"     { EMIT("LOOP_BREAK"); }
+"continue_flow"  { EMIT("LOOP_CONTINUE"); }
 
 
-"magnitude"      { EMIT("TOKEN_MAGNITUDE"); }
-"balance"        { EMIT("TOKEN_BALANCE"); }
-"estimate_up"    { EMIT("TOKEN_ESTIMATE_UP"); }
-"estimate_down"  { EMIT("TOKEN_ESTIMATE_DOWN"); }
-"gap"            { EMIT("TOKEN_GAP"); }
-"normalize"      { EMIT("TOKEN_NORMALIZE"); }
-"surge"          { EMIT("TOKEN_SURGE"); }
-
-"sine"           { EMIT("TOKEN_SINE"); }
-"cosine"         { EMIT("TOKEN_COSINE"); }
-"tangent"        { EMIT("TOKEN_TANGENT"); }
-"arcsine"        { EMIT("TOKEN_ARCSINE"); }
-"arccosine"      { EMIT("TOKEN_ARCCOSINE"); }
-"arctangent"     { EMIT("TOKEN_ARCTANGENT"); }
+"composed_of"        { EMIT("FSM_STATES"); }
+"trigger"            { EMIT("FSM_EVENT"); }
+"current_emotion"    { EMIT("FSM_CURRENT"); }
+"transition"         { EMIT("FSM_TRANSITION"); }
+"when"               { EMIT("FSM_WHEN"); }
 
 
-"->"    { EMIT("TOKEN_ARROW"); }
-
-"=="        { EMIT("TOKEN_EQ"); }
-"!="        { EMIT("TOKEN_NEQ"); }
-"<="        { EMIT("TOKEN_LEQ"); }
-">="        { EMIT("TOKEN_GEQ"); }
-"<"         { EMIT("TOKEN_LT"); }
-">"         { EMIT("TOKEN_GT"); }
-
-"++"        { EMIT("TOKEN_INC"); }
-"--"        { EMIT("TOKEN_DEC"); }
-
-"+"         { EMIT("TOKEN_PLUS"); }
-"-"         { EMIT("TOKEN_MINUS"); }
-"*"         { EMIT("TOKEN_MUL"); }
-"/"         { EMIT("TOKEN_DIV"); }
-"%"         { EMIT("TOKEN_MOD"); }
+"persona"        { EMIT("CLASS_PERSONA"); }
+"end_persona"   { EMIT("CLASS_END"); }
+"manifest"       { EMIT("CLASS_BODY"); }
+"open"           { EMIT("CLASS_OPEN"); }
+"guarded"        { EMIT("CLASS_GUARDED"); }
+"hidden"         { EMIT("CLASS_HIDDEN"); }
+"shared"         { EMIT("CLASS_STATIC"); }
+"evolves_from"   { EMIT("CLASS_INHERIT"); }
+"reshape"        { EMIT("CLASS_OVERRIDE"); }
 
 
-"("     { EMIT("TOKEN_LPAREN"); }
-")"     { EMIT("TOKEN_RPAREN"); }
-"{"     { EMIT("TOKEN_LBRACE"); }
-"}"     { EMIT("TOKEN_RBRACE"); }
-";"     { EMIT("TOKEN_SEMICOLON"); }
-","     { EMIT("TOKEN_COMMA"); }
-":"     { EMIT("TOKEN_COLON"); }
-"."     { EMIT("TOKEN_DOT"); }
+"magnitude"      { EMIT("MATH_ABS"); }
+"balance"        { EMIT("MATH_SQRT"); }
+"estimate_up"    { EMIT("MATH_CEIL"); }
+"estimate_down"  { EMIT("MATH_FLOOR"); }
+"gap"            { EMIT("MATH_DIFF"); }
+"normalize"      { EMIT("MATH_NORM"); }
+"surge"          { EMIT("MATH_POW"); }
+
+"sine"           { EMIT("MATH_SIN"); }
+"cosine"         { EMIT("MATH_COS"); }
+"tangent"        { EMIT("MATH_TAN"); }
+"arcsine"        { EMIT("MATH_ASIN"); }
+"arccosine"      { EMIT("MATH_ACOS"); }
+"arctangent"     { EMIT("MATH_ATAN"); }
 
 
-{FLOAT_LITERAL}          { EMIT_VAL("TOKEN_MEASURE_LITERAL", yytext); }
-{INT_LITERAL}            { EMIT_VAL("TOKEN_COUNT_LITERAL", yytext); }
+"->"    { EMIT("OP_ARROW"); }
 
-\"([^\\\"]|\\.)*\"       { EMIT_VAL("TOKEN_WORDS_LITERAL", yytext); }
+"=="        { EMIT("OP_EQ"); }
+"!="        { EMIT("OP_NEQ"); }
+"<="        { EMIT("OP_LEQ"); }
+">="        { EMIT("OP_GEQ"); }
+"<"         { EMIT("OP_LT"); }
+">"         { EMIT("OP_GT"); }
 
-{IDENTIFIER}             { EMIT_VAL("TOKEN_NAME", yytext); }
+"++"        { EMIT("OP_INC"); }
+"--"        { EMIT("OP_DEC"); }
+
+"+"         { EMIT("OP_PLUS"); }
+"-"         { EMIT("OP_MINUS"); }
+"*"         { EMIT("OP_MUL"); }
+"/"         { EMIT("OP_DIV"); }
+"%"         { EMIT("OP_MOD"); }
+
+"^"         { EMIT("OP_POWER"); }
+
+
+"("     { EMIT("DELIM_LPAREN"); }
+")"     { EMIT("DELIM_RPAREN"); }
+"{"     { EMIT("DELIM_LBRACE"); }
+"}"     { EMIT("DELIM_RBRACE"); }
+";"     { EMIT("DELIM_SEMICOLON"); }
+","     { EMIT("DELIM_COMMA"); }
+":"     { EMIT("DELIM_COLON"); }
+"."     { EMIT("DELIM_DOT"); }
+
+"<<"    { EMIT("DELIM_LSHIFT"); }
+">>"    { EMIT("DELIM_RSHIFT"); }
+
+
+{FLOAT_LITERAL}          { EMIT_VAL("LIT_FLOAT", yytext); }
+{INT_LITERAL}            { EMIT_VAL("LIT_INT", yytext); }
+
+\"([^\\\"]|\\.)*\"       { EMIT_VAL("LIT_STRING", yytext); }
+
+{IDENTIFIER}             { EMIT_VAL("IDENTIFIER", yytext); }
 
 . {
     char buf[64];
@@ -162,6 +184,7 @@ FLOAT_LITERAL   {DIGIT}+"."{DIGIT}+
 }
 %%
 
+#ifndef BISON_MODE
 int main(int argc, char** argv) {
     if (argc < 3) {
         printf("Usage: emotionscript <input.ems> <output.tokens>\n");
@@ -182,3 +205,4 @@ int main(int argc, char** argv) {
     fclose(yyout);
     return 0;
 }
+#endif
