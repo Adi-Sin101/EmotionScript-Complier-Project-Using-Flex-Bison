@@ -66,13 +66,15 @@ int syntax_errors = 0;
 /* Literals and identifiers */
 %token <string_val> LIT_STRING LIT_INT LIT_FLOAT LIT_BOOL IDENTIFIER
 
-/* Operator precedence and associativity */
+/* Operator precedence and associativity (lowest to highest) */
+%nonassoc BARE_ID
+%left OP_EQ OP_NEQ OP_LT OP_GT OP_LEQ OP_GEQ
 %left OP_PLUS OP_MINUS
 %left OP_MUL OP_DIV OP_MOD
 %right OP_POWER
 %right OP_INC OP_DEC
-%left OP_EQ OP_NEQ OP_LT OP_GT OP_LEQ OP_GEQ
 %left DELIM_DOT
+%nonassoc DELIM_LPAREN
 
 /* Union for semantic values */
 %union {
@@ -111,13 +113,13 @@ statement:
     | assignment_stmt
     | expression_stmt
     | function_declaration
-    | function_call_stmt
     | conditional_stmt
     | loop_stmt
     | io_stmt
     | control_flow_stmt
     | persona_declaration
     | fsm_declaration
+    | emotion_based_stmt
     | PROGRAM_ABORT DELIM_SEMICOLON
     | PROGRAM_SCENE IDENTIFIER DELIM_SEMICOLON
     | error DELIM_SEMICOLON { yyerrok; }
@@ -136,7 +138,6 @@ type_specifier:
     | TYPE_MEASURE
     | TYPE_TRUTH
     | TYPE_WORDS
-    | TYPE_EMOTION
     | TYPE_LEVEL
     ;
 
@@ -162,47 +163,38 @@ expression_stmt:
 
 expression:
     primary_expression
-    | binary_expression
-    | unary_expression
-    | function_call
-    | math_function
-    | member_access
-    ;
-
-primary_expression:
-    IDENTIFIER
-    | LIT_INT
-    | LIT_FLOAT
-    | LIT_STRING
-    | LIT_BOOL
-    | DELIM_LPAREN expression DELIM_RPAREN
-    | FSM_CURRENT
-    ;
-
-binary_expression:
-    expression OP_POWER expression
-    | expression OP_PLUS expression
-    | expression OP_MINUS expression
+    | expression OP_POWER expression
     | expression OP_MUL expression
     | expression OP_DIV expression
     | expression OP_MOD expression
+    | expression OP_PLUS expression
+    | expression OP_MINUS expression
     | expression OP_EQ expression
     | expression OP_NEQ expression
     | expression OP_LT expression
     | expression OP_GT expression
     | expression OP_LEQ expression
     | expression OP_GEQ expression
-    ;
-
-unary_expression:
-    IDENTIFIER OP_INC
-    | IDENTIFIER OP_DEC
     | OP_INC IDENTIFIER
     | OP_DEC IDENTIFIER
     ;
 
-member_access:
-    IDENTIFIER DELIM_DOT IDENTIFIER
+primary_expression:
+    IDENTIFIER                                                       %prec BARE_ID
+    | IDENTIFIER OP_INC
+    | IDENTIFIER OP_DEC
+    | IDENTIFIER DELIM_DOT IDENTIFIER
+    | IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN
+    | IDENTIFIER DELIM_LPAREN DELIM_RPAREN
+    | FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN
+    | FUNC_CALL IDENTIFIER DELIM_LPAREN DELIM_RPAREN
+    | LIT_INT
+    | LIT_FLOAT
+    | LIT_STRING
+    | LIT_BOOL
+    | DELIM_LPAREN expression DELIM_RPAREN
+    | math_function
+    | FSM_CURRENT
     ;
 
 /* ==================== FUNCTIONS ==================== */
@@ -227,17 +219,7 @@ function_body:
     | FUNC_RETURN expression DELIM_SEMICOLON
     ;
 
-function_call:
-    FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN
-    | FUNC_CALL IDENTIFIER DELIM_LPAREN DELIM_RPAREN
-    | IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN
-    | IDENTIFIER DELIM_LPAREN DELIM_RPAREN
-    ;
 
-function_call_stmt:
-    FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON
-    | FUNC_CALL IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_SEMICOLON
-    ;
 
 argument_list:
     expression
@@ -284,8 +266,18 @@ else_if_chain:
 
 
 switch_stmt:
-    COND_SWITCH DELIM_LPAREN expression DELIM_RPAREN DELIM_LBRACE case_list DELIM_RBRACE
-    | COND_SWITCH DELIM_LPAREN expression DELIM_RPAREN DELIM_LBRACE case_list default_case DELIM_RBRACE
+    DECIDE_KW DELIM_LPAREN expression DELIM_RPAREN DELIM_LBRACE switch_body DELIM_RBRACE
+    ;
+
+switch_body:
+    switch_body_item
+    | switch_body switch_body_item
+    ;
+
+switch_body_item:
+    expression DELIM_COLON
+    | OTHERWISE_KW DELIM_COLON
+    | statement
     ;
 
 /* New switch-case syntax: decide x ... when ... otherwise ... end_decision */
@@ -305,19 +297,6 @@ new_case_block:
 
 new_default_block:
     OTHERWISE_KW statement_list
-    ;
-
-case_list:
-    case_stmt
-    | case_list case_stmt
-    ;
-
-case_stmt:
-    expression DELIM_COLON statement_list
-    ;
-
-default_case:
-    COND_DEFAULT DELIM_COLON statement_list
     ;
 
 /* ==================== LOOPS ==================== */
@@ -383,10 +362,16 @@ access_modifier:
 /* ==================== FSM CONSTRUCTS ==================== */
 
 fsm_declaration:
-    TYPE_EMOTION IDENTIFIER FSM_STATES DELIM_LBRACE state_list DELIM_RBRACE DELIM_SEMICOLON
-    | FSM_TRANSITION IDENTIFIER FSM_WHEN condition DELIM_SEMICOLON
+    FSM_TRANSITION IDENTIFIER WHEN_KW condition DELIM_SEMICOLON
     | FSM_EVENT IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_LBRACE statement_list DELIM_RBRACE
     | FSM_EVENT IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_LSHIFT statement_list DELIM_RSHIFT
+    ;
+
+/* Unified rule for TYPE_EMOTION to avoid shift/reduce conflict */
+emotion_based_stmt:
+    TYPE_EMOTION IDENTIFIER DELIM_SEMICOLON
+    | TYPE_EMOTION IDENTIFIER OP_ARROW expression DELIM_SEMICOLON
+    | TYPE_EMOTION IDENTIFIER FSM_STATES DELIM_LBRACE state_list DELIM_RBRACE DELIM_SEMICOLON
     ;
 
 state_list:

@@ -14,54 +14,103 @@ awake
     words message;
     emotion feeling;
     level intensity;
-    
+
     ## Assignments
     set age -> 25;
     set temperature -> 36.5;
     set isHappy -> yes;
     set message -> "Hello World";
-    
+
     ## Arithmetic operations
     set age -> age + 1;
     set age -> age - 1;
     set age -> age * 2;
     set age -> age / 2;
     set age -> age % 3;
-    
-    ## Increment/Decrement
+
+    ## Power operator
+        count age;
+        measure temperature;
+        truth isHappy;
+        words greeting;
+        emotion mood;
+        level intensity;
+        thought count tempVar;
+        memory words memoryNote;
+        trait truth alwaysTrue;
+        state level currentLevel;
+    count sqr -> (2 + 3) ^ 2;
+
+        set age -> 25;
+        set temperature -> 36.6;
+        set isHappy -> yes;
+        set greeting -> "Hello, world!";
+        set mood -> calm;
+        set intensity -> 5;
     age++;
     age--;
-    
-    ## Comparisons
+        set tempVar -> magnitude(-42) + balance(16) * estimate_up(3.2) / estimate_down(7.8) % gap(10, 3) ^ surge(2, 3);
+        set tempVar -> sine(0) + cosine(0) + tangent(0) + arcsine(1) + arccosine(1) + arctangent(1);
+    ## Comparisons / Conditionals
     if_feel age == 25
-        speak("Age is 25");
+        # Function declaration and call
+        interpret addNumbers(count x, count y) yields count <<
     else_if_feel age > 25
         speak("Age is greater");
     else_feel
+        set tempVar -> invoke addNumbers(10, 20);
         speak("Age is less");
     end_feel
-    
-    ## Functions
-    interpret calculateSum(count x, count y) yields count
-        reflect x + y;
-    end_interpret
-    
+        # Persona/class with inheritance, access modifiers, static, override
+        persona Human <<
+    ## New switch-case syntax
+    decide age
+    when 25
+        persona Student evolves_from Human <<
+            open count studentId;
+            guarded level grade;
+            reshape interpret speak(words msg) yields truth <<
+                IO_SPEAK("Student says: " + msg);
+                reflect yes;
+            >>
+        >>
+        speak("Twenty five");
+    when 30
+        speak("Thirty");
+    otherwise
+        speak("Other age");
+    end_decision.
+
+    ## Functions with << >> body
+    interpret calculateSum(count x, count y) yields count <<
+        count result -> x + y;
+        reflect result;
+    >>
+
     invoke calculateSum(10, 20);
-    
-    ## Loops
+
+    ## Loops - old style
     ruminate age < 30
         age++;
         speak("Looping");
     end_ruminate
-    
+
+    ## New while loop
+    while_feeling (age < 50)
+        age++;
+        speak("Feeling loop");
+    calm
+
     ## Math functions
     set temperature -> sine(3.14);
     set temperature -> cosine(1.57);
-    
-    ## Persona
-    persona Happy evolves_from Neutral
-        manifest
-            thought positivity;
-    end_persona
+    set temperature -> magnitude(age);
+    set temperature -> balance(16);
+
+    ## Persona with << >> body
+    persona Student evolves_from Human <<
+        count id;
+        words name;
+    >>
 
 sleep
