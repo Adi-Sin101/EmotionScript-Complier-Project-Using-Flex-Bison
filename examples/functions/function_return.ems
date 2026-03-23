@@ -1,0 +1,10 @@
+## Test: Function Return Used in Assignment
+mind FunctionReturn
+awake
+count result;
+interpret getFive() yields count <<
+    reflect 5;
+>>
+set result -> invoke getFive();
+speak(result);
+sleep

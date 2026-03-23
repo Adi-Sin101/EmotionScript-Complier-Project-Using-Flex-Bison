@@ -1,0 +1,12 @@
+## Test: Nested if_feel
+mind NestedIf
+awake
+count x -> 4;
+if_feel x > 1
+    if_feel x > 3
+        speak("inner true");
+    else_feel
+        speak("inner false");
+    end_feel
+end_feel
+sleep

@@ -1,0 +1,10 @@
+## Test: Persona Inheritance
+mind PersonaInheritance
+awake
+persona Animal <<
+    words species;
+>>
+persona Dog evolves_from Animal <<
+    count id;
+>>
+sleep

@@ -1,0 +1,10 @@
+## Test: Variable Declarations Only
+mind DeclareVars
+awake
+count age;
+measure temperature;
+truth isReady;
+words message;
+emotion mood;
+level intensity;
+sleep

@@ -1,0 +1,8 @@
+## Test: For Loop (replay)
+mind ForBasic
+awake
+count i;
+replay (set i -> 0; i < 3; i++)
+    speak(i);
+end_ruminate
+sleep

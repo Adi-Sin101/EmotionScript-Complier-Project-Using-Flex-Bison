@@ -1,0 +1,8 @@
+## Test: Basic if_feel
+mind IfBasic
+awake
+truth canRun -> yes;
+if_feel canRun == yes
+    speak("branch: if");
+end_feel
+sleep

@@ -55,6 +55,9 @@ awake
     if_feel age == 25
         # Function declaration and call
         interpret addNumbers(count x, count y) yields count <<
+            count result -> x + y;
+            reflect result;
+        >>
     else_if_feel age > 25
         speak("Age is greater");
     else_feel
@@ -63,6 +66,8 @@ awake
     end_feel
         # Persona/class with inheritance, access modifiers, static, override
         persona Human <<
+            # human persona content placeholder
+        >>
     ## New switch-case syntax
     decide age
     when 25
@@ -112,5 +117,29 @@ awake
         count id;
         words name;
     >>
+
+    ## More OOP examples
+    persona Teacher evolves_from Human <<
+        open count teacherId;
+        words subject;
+        reshape interpret speak(words msg) yields truth <<
+            IO_SPEAK("Teacher says: " + msg);
+            reflect yes;
+        >>
+    >>
+
+    # Instantiate objects
+    Student student1;
+    Teacher teacher1;
+
+    # Assign values
+    set student1.id -> 101;
+    set student1.name -> "Alice";
+    set teacher1.teacherId -> 501;
+    set teacher1.subject -> "Mathematics";
+
+    # Call methods (polymorphism)
+    invoke student1.speak("Hello from student!");
+    invoke teacher1.speak("Hello from teacher!");
 
 sleep

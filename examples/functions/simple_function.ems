@@ -1,0 +1,9 @@
+## Test: Simple Function
+mind SimpleFunction
+awake
+interpret greet() yields count <<
+    speak("hello");
+    reflect 0;
+>>
+invoke greet();
+sleep

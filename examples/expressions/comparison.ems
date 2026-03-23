@@ -1,0 +1,15 @@
+## Test: Comparison Expressions (> < ==)
+mind ComparisonOps
+awake
+count a -> 5;
+count b -> 3;
+truth gt;
+truth lt;
+truth eq;
+set gt -> a > b;
+set lt -> a < b;
+set eq -> a == b;
+speak(gt);
+speak(lt);
+speak(eq);
+sleep

@@ -1,0 +1,11 @@
+## Test: Persona Member Access
+mind MemberAccess
+awake
+persona User <<
+    count id;
+    words name;
+>>
+User u;
+set u.id -> 101;
+set u.name -> "Alice";
+sleep

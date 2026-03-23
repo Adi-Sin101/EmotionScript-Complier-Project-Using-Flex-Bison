@@ -1,0 +1,12 @@
+## Test: Arithmetic Expressions (+ - * /)
+mind ArithmeticOps
+awake
+count a -> 8;
+count b -> 2;
+measure result;
+set result -> a + b;
+set result -> a - b;
+set result -> a * b;
+set result -> a / b;
+speak(result);
+sleep

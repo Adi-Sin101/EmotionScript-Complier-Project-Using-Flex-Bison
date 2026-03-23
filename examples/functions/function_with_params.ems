@@ -1,0 +1,9 @@
+## Test: Function with Parameters
+mind FunctionWithParams
+awake
+interpret add(count a, count b) yields count <<
+    count c -> a + b;
+    reflect c;
+>>
+invoke add(1, 2);
+sleep

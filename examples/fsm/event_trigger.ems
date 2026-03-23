@@ -1,0 +1,7 @@
+## Test: FSM Event Trigger
+mind EventTrigger
+awake
+trigger onWake() {
+    speak("event fired");
+}
+sleep

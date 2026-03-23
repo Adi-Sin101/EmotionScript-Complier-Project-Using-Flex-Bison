@@ -1,0 +1,15 @@
+## Test: break_free and continue_flow
+mind BreakContinue
+awake
+count i -> 0;
+ruminate i < 6
+    i++;
+    if_feel i == 2
+        continue_flow;
+    end_feel
+    if_feel i == 5
+        break_free;
+    end_feel
+    speak(i);
+end_ruminate
+sleep

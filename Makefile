@@ -1,15 +1,13 @@
 # EmotionScript Compiler Makefile
-# Supports both Windows (gcc/flex/bison) and Unix-like systems
+# Compiles a lexer (Flex) and parser (Bison) into a unified executable
 
 # Compiler and tools
 CC = gcc
 FLEX = flex
 BISON = bison
-CFLAGS = -Wall -g
 
-# Output executables
-LEXER = emotionscript_lexer.exe
-PARSER = emotionscript_parser.exe
+# Compiler flags
+CFLAGS = -Wall -Wextra -g -O2 -Wno-unused-label -Wno-unused-function
 
 # Source files
 LEX_FILE = emotionscript.l
@@ -20,64 +18,68 @@ LEX_C = lex.yy.c
 YACC_C = emotionscript.tab.c
 YACC_H = emotionscript.tab.h
 
-.PHONY: all lexer parser clean test help
+# Output executable
+TARGET = emotionscript
 
-# Default target: build both lexer and parser
-all: lexer parser
+# Default target
+.PHONY: all clean test run help
 
-# Build standalone lexer (token generator)
-lexer: $(LEX_FILE)
-	@echo "Building standalone lexer..."
-	$(FLEX) $(LEX_FILE)
-	$(CC) $(CFLAGS) $(LEX_C) -o $(LEXER)
-	@echo "✓ Lexer built successfully: $(LEXER)"
+all: $(TARGET)
 
-# Build parser with lexer (syntax validator)
-parser: $(LEX_FILE) $(YACC_FILE)
-	@echo "Building parser with integrated lexer..."
+# Build the complete compiler
+$(TARGET): $(YACC_C) $(LEX_C) symbol_table.c
+	@echo "[3/3] Compiling object files and linking..."
+	$(CC) $(CFLAGS) $(YACC_C) $(LEX_C) symbol_table.c -o $(TARGET)
+	@echo "✓ Build successful: $(TARGET)"
+
+# Step 1: Generate parser C code and header from Bison file
+$(YACC_C) $(YACC_H): $(YACC_FILE)
+	@echo "[1/3] Generating parser with Bison..."
 	$(BISON) -d $(YACC_FILE)
-	$(FLEX) -DBISON_MODE $(LEX_FILE)
-	$(CC) $(CFLAGS) -DBISON_MODE $(YACC_C) $(LEX_C) -o $(PARSER)
-	@echo "✓ Parser built successfully: $(PARSER)"
+	@echo "✓ Parser generated: $(YACC_C), $(YACC_H)"
 
-# Test the lexer
-test-lexer: lexer
-	@echo "Testing lexer on test.ems..."
-	./$(LEXER) test.ems token.out
-	@echo "✓ Tokens generated in token.out"
+# Step 2: Generate lexer C code from Flex file
+$(LEX_C): $(LEX_FILE) $(YACC_H)
+	@echo "[2/3] Generating lexer with Flex..."
+	$(FLEX) $(LEX_FILE)
+	@echo "✓ Lexer generated: $(LEX_C)"
 
-# Test the parser
-test-parser: parser
-	@echo "Testing parser on test.ems..."
-	./$(PARSER) test.ems syntax.out
-	@echo "✓ Syntax validation result in syntax.out"
+# Run the compiler on test file
+run: $(TARGET)
+	@echo "Running EmotionScript compiler on test.ems..."
+	./$(TARGET) test.ems syntax_output.txt
+	@echo "✓ Output written to syntax_output.txt"
+	@echo ""
+	@echo "=== Compilation Result ==="
+	@cat syntax_output.txt
 
-# Run both tests
-test: test-lexer test-parser
-	@echo "✓ All tests completed"
+# Run tests
+test: $(TARGET) run
+	@echo ""
+	@echo "✓ Test completed successfully"
 
-# Clean generated files
+# Clean build artifacts
 clean:
-	@echo "Cleaning generated files..."
+	@echo "Cleaning build artifacts..."
 	rm -f $(LEX_C) $(YACC_C) $(YACC_H)
-	rm -f $(LEXER) $(PARSER)
-	rm -f *.exe *.out
+	rm -f emotionscript.exe $(TARGET)
+	rm -f *.o
 	@echo "✓ Clean complete"
 
-# Help information
+# Show help
 help:
 	@echo "EmotionScript Compiler Build System"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make all         - Build both lexer and parser (default)"
-	@echo "  make lexer       - Build standalone lexer only"
-	@echo "  make parser      - Build parser with integrated lexer"
-	@echo "  make test-lexer  - Build and test lexer"
-	@echo "  make test-parser - Build and test parser"
-	@echo "  make test        - Run all tests"
-	@echo "  make clean       - Remove generated files"
-	@echo "  make help        - Show this help"
+	@echo "  all    - Build the emotionscript executable (default)"
+	@echo "  run    - Build and run on test.ems"
+	@echo "  test   - Run build and tests"
+	@echo "  clean  - Remove all generated files"
+	@echo "  help   - Show this help message"
 	@echo ""
-	@echo "Usage examples:"
-	@echo "  Lexer:  ./$(LEXER) input.ems output.tokens"
-	@echo "  Parser: ./$(PARSER) input.ems output.syntax"
+	@echo "Build Command:"
+	@echo "  make"
+	@echo ""
+	@echo "Usage:"
+	@echo "  ./emotionscript <input.ems> <output.txt>"
+

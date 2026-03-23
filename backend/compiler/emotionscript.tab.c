@@ -77,6 +77,8 @@
 #include <stdarg.h>
 #include <math.h>
 #include "symbol_table.h"
+#include "interpreter.h"
+#include "intermediate_code.h"
 
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
@@ -253,11 +255,14 @@ static char *value_to_cstr(RuntimeValue v) {
 
 static void tracef(const char *fmt, ...) {
     va_list args;
+    char msg[1024];
+
     va_start(args, fmt);
-    fprintf(yyout, "[TRACE] ");
-    vfprintf(yyout, fmt, args);
-    fprintf(yyout, "\n");
+    vsnprintf(msg, sizeof(msg), fmt, args);
     va_end(args);
+
+    interpreter_trace(yyout, "%s", msg);
+    icg_emit(msg);
 }
 
 static void semantic_error(const char *msg) {
@@ -821,7 +826,7 @@ static ExecSignal execute_block(Block *b) {
 
 
 /* Line 189 of yacc.c  */
-#line 825 "emotionscript.tab.c"
+#line 830 "emotionscript.tab.c"
 
 /* Enabling traces.  */
 #ifndef YYDEBUG
@@ -959,7 +964,7 @@ typedef union YYSTYPE
 {
 
 /* Line 214 of yacc.c  */
-#line 824 "emotionscript.y"
+#line 829 "emotionscript.y"
 
     char *string_val;
     int int_val;
@@ -973,7 +978,7 @@ typedef union YYSTYPE
 
 
 /* Line 214 of yacc.c  */
-#line 977 "emotionscript.tab.c"
+#line 982 "emotionscript.tab.c"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
@@ -985,7 +990,7 @@ typedef union YYSTYPE
 
 
 /* Line 264 of yacc.c  */
-#line 989 "emotionscript.tab.c"
+#line 994 "emotionscript.tab.c"
 
 #ifdef short
 # undef short
@@ -1350,22 +1355,22 @@ static const yytype_int16 yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] =
 {
-       0,   840,   840,   848,   849,   853,   854,   858,   859,   860,
-     861,   862,   863,   864,   865,   866,   867,   868,   869,   870,
-     871,   872,   873,   874,   875,   876,   880,   887,   894,   901,
-     912,   913,   914,   915,   916,   917,   918,   922,   923,   924,
-     925,   929,   936,   946,   955,   956,   957,   958,   959,   960,
-     961,   962,   963,   964,   965,   966,   967,   968,   969,   970,
-     974,   975,   976,   977,   978,   979,   980,   981,   982,   983,
-     984,  1001,  1002,  1003,  1004,  1008,  1012,  1019,  1020,  1024,
-    1032,  1036,  1044,  1045,  1049,  1050,  1051,  1052,  1053,  1054,
-    1055,  1056,  1057,  1058,  1059,  1060,  1061,  1065,  1072,  1080,
-    1088,  1097,  1098,  1102,  1106,  1110,  1117,  1126,  1127,  1131,
-    1132,  1133,  1137,  1146,  1147,  1148,  1152,  1156,  1160,  1167,
-    1176,  1180,  1190,  1191,  1195,  1201,  1207,  1216,  1217,  1221,
-    1222,  1226,  1227,  1231,  1232,  1233,  1234,  1235,  1236,  1237,
-    1238,  1242,  1243,  1244,  1248,  1249,  1250,  1254,  1255,  1256,
-    1260,  1261
+       0,   845,   845,   853,   854,   858,   859,   863,   864,   865,
+     866,   867,   868,   869,   870,   871,   872,   873,   874,   875,
+     876,   877,   878,   879,   880,   881,   885,   892,   899,   906,
+     917,   918,   919,   920,   921,   922,   923,   927,   928,   929,
+     930,   934,   941,   951,   960,   961,   962,   963,   964,   965,
+     966,   967,   968,   969,   970,   971,   972,   973,   974,   975,
+     979,   980,   981,   982,   983,   984,   985,   986,   987,   988,
+     989,  1006,  1007,  1008,  1009,  1013,  1017,  1024,  1025,  1029,
+    1037,  1041,  1049,  1050,  1054,  1055,  1056,  1057,  1058,  1059,
+    1060,  1061,  1062,  1063,  1064,  1065,  1066,  1070,  1077,  1085,
+    1093,  1102,  1103,  1107,  1111,  1115,  1122,  1131,  1132,  1136,
+    1137,  1138,  1142,  1151,  1152,  1153,  1157,  1161,  1165,  1172,
+    1181,  1185,  1195,  1196,  1200,  1206,  1212,  1221,  1222,  1226,
+    1227,  1231,  1232,  1236,  1237,  1238,  1239,  1240,  1241,  1242,
+    1243,  1247,  1248,  1249,  1253,  1254,  1255,  1259,  1260,  1261,
+    1265,  1266
 };
 #endif
 
@@ -3062,7 +3067,7 @@ yyreduce:
         case 2:
 
 /* Line 1455 of yacc.c  */
-#line 841 "emotionscript.y"
+#line 846 "emotionscript.y"
     {
         root_program = (yyvsp[(4) - (5)].block_ptr);
         fprintf(yyout, "✓ Valid EmotionScript program\n");
@@ -3072,168 +3077,168 @@ yyreduce:
   case 3:
 
 /* Line 1455 of yacc.c  */
-#line 848 "emotionscript.y"
+#line 853 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 4:
 
 /* Line 1455 of yacc.c  */
-#line 849 "emotionscript.y"
+#line 854 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 5:
 
 /* Line 1455 of yacc.c  */
-#line 853 "emotionscript.y"
+#line 858 "emotionscript.y"
     { (yyval.block_ptr) = append_stmt(new_block(), (yyvsp[(1) - (1)].stmt_ptr)); ;}
     break;
 
   case 6:
 
 /* Line 1455 of yacc.c  */
-#line 854 "emotionscript.y"
+#line 859 "emotionscript.y"
     { (yyval.block_ptr) = append_stmt((yyvsp[(1) - (2)].block_ptr), (yyvsp[(2) - (2)].stmt_ptr)); ;}
     break;
 
   case 7:
 
 /* Line 1455 of yacc.c  */
-#line 858 "emotionscript.y"
+#line 863 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 8:
 
 /* Line 1455 of yacc.c  */
-#line 859 "emotionscript.y"
+#line 864 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 9:
 
 /* Line 1455 of yacc.c  */
-#line 860 "emotionscript.y"
+#line 865 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 10:
 
 /* Line 1455 of yacc.c  */
-#line 861 "emotionscript.y"
+#line 866 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 11:
 
 /* Line 1455 of yacc.c  */
-#line 862 "emotionscript.y"
+#line 867 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 12:
 
 /* Line 1455 of yacc.c  */
-#line 863 "emotionscript.y"
+#line 868 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 13:
 
 /* Line 1455 of yacc.c  */
-#line 864 "emotionscript.y"
+#line 869 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 14:
 
 /* Line 1455 of yacc.c  */
-#line 865 "emotionscript.y"
+#line 870 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 15:
 
 /* Line 1455 of yacc.c  */
-#line 866 "emotionscript.y"
+#line 871 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 16:
 
 /* Line 1455 of yacc.c  */
-#line 867 "emotionscript.y"
+#line 872 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 17:
 
 /* Line 1455 of yacc.c  */
-#line 868 "emotionscript.y"
+#line 873 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 18:
 
 /* Line 1455 of yacc.c  */
-#line 869 "emotionscript.y"
+#line 874 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 19:
 
 /* Line 1455 of yacc.c  */
-#line 870 "emotionscript.y"
+#line 875 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 20:
 
 /* Line 1455 of yacc.c  */
-#line 871 "emotionscript.y"
+#line 876 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 21:
 
 /* Line 1455 of yacc.c  */
-#line 872 "emotionscript.y"
+#line 877 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 22:
 
 /* Line 1455 of yacc.c  */
-#line 873 "emotionscript.y"
+#line 878 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 23:
 
 /* Line 1455 of yacc.c  */
-#line 874 "emotionscript.y"
+#line 879 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 24:
 
 /* Line 1455 of yacc.c  */
-#line 875 "emotionscript.y"
+#line 880 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 25:
 
 /* Line 1455 of yacc.c  */
-#line 876 "emotionscript.y"
+#line 881 "emotionscript.y"
     { yyerrok; (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 26:
 
 /* Line 1455 of yacc.c  */
-#line 881 "emotionscript.y"
+#line 886 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = (SymbolType)(yyvsp[(1) - (3)].symbol_type);
@@ -3245,7 +3250,7 @@ yyreduce:
   case 27:
 
 /* Line 1455 of yacc.c  */
-#line 888 "emotionscript.y"
+#line 893 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = SYM_UNKNOWN;
@@ -3257,7 +3262,7 @@ yyreduce:
   case 28:
 
 /* Line 1455 of yacc.c  */
-#line 895 "emotionscript.y"
+#line 900 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = (SymbolType)(yyvsp[(2) - (4)].symbol_type);
@@ -3269,7 +3274,7 @@ yyreduce:
   case 29:
 
 /* Line 1455 of yacc.c  */
-#line 902 "emotionscript.y"
+#line 907 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = (SymbolType)(yyvsp[(1) - (5)].symbol_type);
@@ -3282,56 +3287,56 @@ yyreduce:
   case 30:
 
 /* Line 1455 of yacc.c  */
-#line 912 "emotionscript.y"
+#line 917 "emotionscript.y"
     { (yyval.symbol_type) = SYM_COUNT; ;}
     break;
 
   case 31:
 
 /* Line 1455 of yacc.c  */
-#line 913 "emotionscript.y"
+#line 918 "emotionscript.y"
     { (yyval.symbol_type) = SYM_MEASURE; ;}
     break;
 
   case 32:
 
 /* Line 1455 of yacc.c  */
-#line 914 "emotionscript.y"
+#line 919 "emotionscript.y"
     { (yyval.symbol_type) = SYM_TRUTH; ;}
     break;
 
   case 33:
 
 /* Line 1455 of yacc.c  */
-#line 915 "emotionscript.y"
+#line 920 "emotionscript.y"
     { (yyval.symbol_type) = SYM_WORDS; ;}
     break;
 
   case 34:
 
 /* Line 1455 of yacc.c  */
-#line 916 "emotionscript.y"
+#line 921 "emotionscript.y"
     { (yyval.symbol_type) = SYM_LEVEL; ;}
     break;
 
   case 35:
 
 /* Line 1455 of yacc.c  */
-#line 917 "emotionscript.y"
+#line 922 "emotionscript.y"
     { (yyval.symbol_type) = SYM_EMOTION; ;}
     break;
 
   case 36:
 
 /* Line 1455 of yacc.c  */
-#line 918 "emotionscript.y"
+#line 923 "emotionscript.y"
     { (yyval.symbol_type) = SYM_UNKNOWN; ;}
     break;
 
   case 41:
 
 /* Line 1455 of yacc.c  */
-#line 930 "emotionscript.y"
+#line 935 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_ASSIGN);
         s->name = strdup((yyvsp[(2) - (5)].string_val));
@@ -3343,7 +3348,7 @@ yyreduce:
   case 42:
 
 /* Line 1455 of yacc.c  */
-#line 937 "emotionscript.y"
+#line 942 "emotionscript.y"
     {
         (void)(yyvsp[(2) - (7)].string_val);
         (void)(yyvsp[(4) - (7)].string_val);
@@ -3355,7 +3360,7 @@ yyreduce:
   case 43:
 
 /* Line 1455 of yacc.c  */
-#line 947 "emotionscript.y"
+#line 952 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_EXPR);
         s->expr = (yyvsp[(1) - (2)].expr_ptr);
@@ -3366,189 +3371,189 @@ yyreduce:
   case 44:
 
 /* Line 1455 of yacc.c  */
-#line 955 "emotionscript.y"
+#line 960 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(1) - (1)].expr_ptr); ;}
     break;
 
   case 45:
 
 /* Line 1455 of yacc.c  */
-#line 956 "emotionscript.y"
+#line 961 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_POWER, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 46:
 
 /* Line 1455 of yacc.c  */
-#line 957 "emotionscript.y"
+#line 962 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_MUL, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 47:
 
 /* Line 1455 of yacc.c  */
-#line 958 "emotionscript.y"
+#line 963 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_DIV, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 48:
 
 /* Line 1455 of yacc.c  */
-#line 959 "emotionscript.y"
+#line 964 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_MOD, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 49:
 
 /* Line 1455 of yacc.c  */
-#line 960 "emotionscript.y"
+#line 965 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_PLUS, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 50:
 
 /* Line 1455 of yacc.c  */
-#line 961 "emotionscript.y"
+#line 966 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_MINUS, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 51:
 
 /* Line 1455 of yacc.c  */
-#line 962 "emotionscript.y"
+#line 967 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_EQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 52:
 
 /* Line 1455 of yacc.c  */
-#line 963 "emotionscript.y"
+#line 968 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_NEQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 53:
 
 /* Line 1455 of yacc.c  */
-#line 964 "emotionscript.y"
+#line 969 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_LT, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 54:
 
 /* Line 1455 of yacc.c  */
-#line 965 "emotionscript.y"
+#line 970 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_GT, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 55:
 
 /* Line 1455 of yacc.c  */
-#line 966 "emotionscript.y"
+#line 971 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_LEQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 56:
 
 /* Line 1455 of yacc.c  */
-#line 967 "emotionscript.y"
+#line 972 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_GEQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 57:
 
 /* Line 1455 of yacc.c  */
-#line 968 "emotionscript.y"
+#line 973 "emotionscript.y"
     { (yyval.expr_ptr) = expr_prefix(OP_INC, (yyvsp[(2) - (2)].string_val)); ;}
     break;
 
   case 58:
 
 /* Line 1455 of yacc.c  */
-#line 969 "emotionscript.y"
+#line 974 "emotionscript.y"
     { (yyval.expr_ptr) = expr_prefix(OP_DEC, (yyvsp[(2) - (2)].string_val)); ;}
     break;
 
   case 59:
 
 /* Line 1455 of yacc.c  */
-#line 970 "emotionscript.y"
+#line 975 "emotionscript.y"
     { (yyval.expr_ptr) = expr_unary_minus((yyvsp[(2) - (2)].expr_ptr)); ;}
     break;
 
   case 60:
 
 /* Line 1455 of yacc.c  */
-#line 974 "emotionscript.y"
+#line 979 "emotionscript.y"
     { (yyval.expr_ptr) = expr_var((yyvsp[(1) - (1)].string_val)); ;}
     break;
 
   case 61:
 
 /* Line 1455 of yacc.c  */
-#line 975 "emotionscript.y"
+#line 980 "emotionscript.y"
     { (yyval.expr_ptr) = expr_postfix(OP_INC, (yyvsp[(1) - (2)].string_val)); ;}
     break;
 
   case 62:
 
 /* Line 1455 of yacc.c  */
-#line 976 "emotionscript.y"
+#line 981 "emotionscript.y"
     { (yyval.expr_ptr) = expr_postfix(OP_DEC, (yyvsp[(1) - (2)].string_val)); ;}
     break;
 
   case 63:
 
 /* Line 1455 of yacc.c  */
-#line 977 "emotionscript.y"
+#line 982 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 64:
 
 /* Line 1455 of yacc.c  */
-#line 978 "emotionscript.y"
+#line 983 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 65:
 
 /* Line 1455 of yacc.c  */
-#line 979 "emotionscript.y"
+#line 984 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 66:
 
 /* Line 1455 of yacc.c  */
-#line 980 "emotionscript.y"
+#line 985 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 67:
 
 /* Line 1455 of yacc.c  */
-#line 981 "emotionscript.y"
+#line 986 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 68:
 
 /* Line 1455 of yacc.c  */
-#line 982 "emotionscript.y"
+#line 987 "emotionscript.y"
     { (yyval.expr_ptr) = expr_literal(make_int(atoi((yyvsp[(1) - (1)].string_val)))); ;}
     break;
 
   case 69:
 
 /* Line 1455 of yacc.c  */
-#line 983 "emotionscript.y"
+#line 988 "emotionscript.y"
     { (yyval.expr_ptr) = expr_literal(make_float(strtod((yyvsp[(1) - (1)].string_val), NULL))); ;}
     break;
 
   case 70:
 
 /* Line 1455 of yacc.c  */
-#line 985 "emotionscript.y"
+#line 990 "emotionscript.y"
     {
           size_t n = strlen((yyvsp[(1) - (1)].string_val));
           if (n >= 2 && (yyvsp[(1) - (1)].string_val)[0] == '"' && (yyvsp[(1) - (1)].string_val)[n - 1] == '"') {
@@ -3570,35 +3575,35 @@ yyreduce:
   case 71:
 
 /* Line 1455 of yacc.c  */
-#line 1001 "emotionscript.y"
+#line 1006 "emotionscript.y"
     { (yyval.expr_ptr) = expr_literal(make_bool(strcmp((yyvsp[(1) - (1)].string_val), "yes") == 0)); ;}
     break;
 
   case 72:
 
 /* Line 1455 of yacc.c  */
-#line 1002 "emotionscript.y"
+#line 1007 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(2) - (3)].expr_ptr); ;}
     break;
 
   case 73:
 
 /* Line 1455 of yacc.c  */
-#line 1003 "emotionscript.y"
+#line 1008 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(1) - (1)].expr_ptr); ;}
     break;
 
   case 74:
 
 /* Line 1455 of yacc.c  */
-#line 1004 "emotionscript.y"
+#line 1009 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 75:
 
 /* Line 1455 of yacc.c  */
-#line 1009 "emotionscript.y"
+#line 1014 "emotionscript.y"
     {
         (yyval.stmt_ptr) = new_stmt(ST_NOOP);
     ;}
@@ -3607,7 +3612,7 @@ yyreduce:
   case 76:
 
 /* Line 1455 of yacc.c  */
-#line 1013 "emotionscript.y"
+#line 1018 "emotionscript.y"
     {
         (yyval.stmt_ptr) = new_stmt(ST_NOOP);
     ;}
@@ -3616,21 +3621,21 @@ yyreduce:
   case 77:
 
 /* Line 1455 of yacc.c  */
-#line 1019 "emotionscript.y"
+#line 1024 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 78:
 
 /* Line 1455 of yacc.c  */
-#line 1020 "emotionscript.y"
+#line 1025 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (3)].block_ptr); ;}
     break;
 
   case 79:
 
 /* Line 1455 of yacc.c  */
-#line 1025 "emotionscript.y"
+#line 1030 "emotionscript.y"
     {
         (void)(yyvsp[(1) - (2)].symbol_type);
         (void)(yyvsp[(2) - (2)].string_val);
@@ -3640,14 +3645,14 @@ yyreduce:
   case 80:
 
 /* Line 1455 of yacc.c  */
-#line 1032 "emotionscript.y"
+#line 1037 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 81:
 
 /* Line 1455 of yacc.c  */
-#line 1037 "emotionscript.y"
+#line 1042 "emotionscript.y"
     {
         (void)(yyvsp[(2) - (3)].expr_ptr);
         (yyval.stmt_ptr) = new_stmt(ST_NOOP);
@@ -3657,112 +3662,112 @@ yyreduce:
   case 82:
 
 /* Line 1455 of yacc.c  */
-#line 1044 "emotionscript.y"
+#line 1049 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 83:
 
 /* Line 1455 of yacc.c  */
-#line 1045 "emotionscript.y"
+#line 1050 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (3)].block_ptr); ;}
     break;
 
   case 84:
 
 /* Line 1455 of yacc.c  */
-#line 1049 "emotionscript.y"
+#line 1054 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 85:
 
 /* Line 1455 of yacc.c  */
-#line 1050 "emotionscript.y"
+#line 1055 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 86:
 
 /* Line 1455 of yacc.c  */
-#line 1051 "emotionscript.y"
+#line 1056 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 87:
 
 /* Line 1455 of yacc.c  */
-#line 1052 "emotionscript.y"
+#line 1057 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 88:
 
 /* Line 1455 of yacc.c  */
-#line 1053 "emotionscript.y"
+#line 1058 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 89:
 
 /* Line 1455 of yacc.c  */
-#line 1054 "emotionscript.y"
+#line 1059 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 90:
 
 /* Line 1455 of yacc.c  */
-#line 1055 "emotionscript.y"
+#line 1060 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 91:
 
 /* Line 1455 of yacc.c  */
-#line 1056 "emotionscript.y"
+#line 1061 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 92:
 
 /* Line 1455 of yacc.c  */
-#line 1057 "emotionscript.y"
+#line 1062 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 93:
 
 /* Line 1455 of yacc.c  */
-#line 1058 "emotionscript.y"
+#line 1063 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 94:
 
 /* Line 1455 of yacc.c  */
-#line 1059 "emotionscript.y"
+#line 1064 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 95:
 
 /* Line 1455 of yacc.c  */
-#line 1060 "emotionscript.y"
+#line 1065 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 96:
 
 /* Line 1455 of yacc.c  */
-#line 1061 "emotionscript.y"
+#line 1066 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 97:
 
 /* Line 1455 of yacc.c  */
-#line 1066 "emotionscript.y"
+#line 1071 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (4)].expr_ptr);
@@ -3774,7 +3779,7 @@ yyreduce:
   case 98:
 
 /* Line 1455 of yacc.c  */
-#line 1073 "emotionscript.y"
+#line 1078 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (5)].expr_ptr);
@@ -3787,7 +3792,7 @@ yyreduce:
   case 99:
 
 /* Line 1455 of yacc.c  */
-#line 1081 "emotionscript.y"
+#line 1086 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (6)].expr_ptr);
@@ -3800,7 +3805,7 @@ yyreduce:
   case 100:
 
 /* Line 1455 of yacc.c  */
-#line 1089 "emotionscript.y"
+#line 1094 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (7)].expr_ptr);
@@ -3814,28 +3819,28 @@ yyreduce:
   case 101:
 
 /* Line 1455 of yacc.c  */
-#line 1097 "emotionscript.y"
+#line 1102 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 102:
 
 /* Line 1455 of yacc.c  */
-#line 1098 "emotionscript.y"
+#line 1103 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 103:
 
 /* Line 1455 of yacc.c  */
-#line 1102 "emotionscript.y"
+#line 1107 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(1) - (1)].expr_ptr); ;}
     break;
 
   case 104:
 
 /* Line 1455 of yacc.c  */
-#line 1107 "emotionscript.y"
+#line 1112 "emotionscript.y"
     {
         (yyval.branch_ptr) = new_branch((yyvsp[(2) - (3)].expr_ptr), (yyvsp[(3) - (3)].block_ptr));
     ;}
@@ -3844,7 +3849,7 @@ yyreduce:
   case 105:
 
 /* Line 1455 of yacc.c  */
-#line 1111 "emotionscript.y"
+#line 1116 "emotionscript.y"
     {
         (yyval.branch_ptr) = append_branch((yyvsp[(1) - (4)].branch_ptr), new_branch((yyvsp[(3) - (4)].expr_ptr), (yyvsp[(4) - (4)].block_ptr)));
     ;}
@@ -3853,7 +3858,7 @@ yyreduce:
   case 106:
 
 /* Line 1455 of yacc.c  */
-#line 1118 "emotionscript.y"
+#line 1123 "emotionscript.y"
     {
         (void)(yyvsp[(3) - (7)].expr_ptr);
         (void)(yyvsp[(6) - (7)].block_ptr);
@@ -3864,21 +3869,21 @@ yyreduce:
   case 107:
 
 /* Line 1455 of yacc.c  */
-#line 1126 "emotionscript.y"
+#line 1131 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 108:
 
 /* Line 1455 of yacc.c  */
-#line 1127 "emotionscript.y"
+#line 1132 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
   case 112:
 
 /* Line 1455 of yacc.c  */
-#line 1138 "emotionscript.y"
+#line 1143 "emotionscript.y"
     {
         (void)(yyvsp[(2) - (5)].expr_ptr);
         (void)(yyvsp[(3) - (5)].block_ptr);
@@ -3889,42 +3894,42 @@ yyreduce:
   case 113:
 
 /* Line 1455 of yacc.c  */
-#line 1146 "emotionscript.y"
+#line 1151 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 114:
 
 /* Line 1455 of yacc.c  */
-#line 1147 "emotionscript.y"
+#line 1152 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
   case 115:
 
 /* Line 1455 of yacc.c  */
-#line 1148 "emotionscript.y"
+#line 1153 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
   case 116:
 
 /* Line 1455 of yacc.c  */
-#line 1152 "emotionscript.y"
+#line 1157 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(3) - (3)].block_ptr); ;}
     break;
 
   case 117:
 
 /* Line 1455 of yacc.c  */
-#line 1156 "emotionscript.y"
+#line 1161 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(2) - (2)].block_ptr); ;}
     break;
 
   case 118:
 
 /* Line 1455 of yacc.c  */
-#line 1161 "emotionscript.y"
+#line 1166 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_WHILE);
         s->condition = (yyvsp[(2) - (4)].expr_ptr);
@@ -3936,7 +3941,7 @@ yyreduce:
   case 119:
 
 /* Line 1455 of yacc.c  */
-#line 1168 "emotionscript.y"
+#line 1173 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_FOR);
         s->for_init = (yyvsp[(3) - (9)].stmt_ptr);
@@ -3950,14 +3955,14 @@ yyreduce:
   case 120:
 
 /* Line 1455 of yacc.c  */
-#line 1176 "emotionscript.y"
+#line 1181 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 121:
 
 /* Line 1455 of yacc.c  */
-#line 1181 "emotionscript.y"
+#line 1186 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_WHILE);
         s->condition = (yyvsp[(3) - (6)].expr_ptr);
@@ -3969,21 +3974,21 @@ yyreduce:
   case 122:
 
 /* Line 1455 of yacc.c  */
-#line 1190 "emotionscript.y"
+#line 1195 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_BREAK); ;}
     break;
 
   case 123:
 
 /* Line 1455 of yacc.c  */
-#line 1191 "emotionscript.y"
+#line 1196 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_CONTINUE); ;}
     break;
 
   case 124:
 
 /* Line 1455 of yacc.c  */
-#line 1196 "emotionscript.y"
+#line 1201 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IO_SPEAK);
         s->expr = (yyvsp[(3) - (5)].expr_ptr);
@@ -3994,7 +3999,7 @@ yyreduce:
   case 125:
 
 /* Line 1455 of yacc.c  */
-#line 1202 "emotionscript.y"
+#line 1207 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IO_LISTEN);
         s->name = strdup((yyvsp[(3) - (5)].string_val));
@@ -4005,7 +4010,7 @@ yyreduce:
   case 126:
 
 /* Line 1455 of yacc.c  */
-#line 1208 "emotionscript.y"
+#line 1213 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IO_ALERT);
         s->expr = (yyvsp[(3) - (5)].expr_ptr);
@@ -4016,35 +4021,35 @@ yyreduce:
   case 129:
 
 /* Line 1455 of yacc.c  */
-#line 1221 "emotionscript.y"
+#line 1226 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 130:
 
 /* Line 1455 of yacc.c  */
-#line 1222 "emotionscript.y"
+#line 1227 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 131:
 
 /* Line 1455 of yacc.c  */
-#line 1226 "emotionscript.y"
+#line 1231 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 132:
 
 /* Line 1455 of yacc.c  */
-#line 1227 "emotionscript.y"
+#line 1232 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
 
 
 /* Line 1455 of yacc.c  */
-#line 4048 "emotionscript.tab.c"
+#line 4053 "emotionscript.tab.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -4256,7 +4261,7 @@ yyreturn:
 
 
 /* Line 1675 of yacc.c  */
-#line 1264 "emotionscript.y"
+#line 1269 "emotionscript.y"
 
 
 void yyerror(const char *s) {
@@ -4266,6 +4271,8 @@ void yyerror(const char *s) {
 
 int main(int argc, char **argv) {
     int result;
+
+    icg_reset();
 
     if (argc < 3) {
         printf("Usage: %s <input.tokens> <output.syntax>\n", argv[0]);
@@ -4294,6 +4301,7 @@ int main(int argc, char **argv) {
         fprintf(yyout, "\n=== EXECUTION TRACE ===\n");
         (void)execute_block(root_program);
         fprintf(yyout, "=== EXECUTION COMPLETE ===\n");
+        icg_dump(yyout);
     } else {
         fprintf(yyout, "\n=== PARSE: FAILED ===\n");
         fprintf(yyout, "✗ Found %d syntax error(s)\n", syntax_errors);

@@ -1,0 +1,5 @@
+## Test: FSM State Definition
+mind StateDefinition
+awake
+emotion mood composed_of { Calm, Angry, Joyful };
+sleep

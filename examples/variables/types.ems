@@ -1,0 +1,16 @@
+## Test: All Data Types
+mind TypeShowcase
+awake
+count c -> 1;
+measure m -> 2.5;
+truth t -> yes;
+words w -> "ok";
+emotion e -> "calm";
+level l -> 3;
+speak(c);
+speak(m);
+speak(t);
+speak(w);
+speak(e);
+speak(l);
+sleep

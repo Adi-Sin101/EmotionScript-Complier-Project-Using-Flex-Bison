@@ -1,0 +1,5 @@
+## Test: FSM Transition Rule
+mind TransitionRule
+awake
+transition Calm when 1 == 1;
+sleep

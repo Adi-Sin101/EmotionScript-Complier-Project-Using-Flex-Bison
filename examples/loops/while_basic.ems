@@ -1,0 +1,9 @@
+## Test: While Loop (ruminate)
+mind WhileBasic
+awake
+count i -> 0;
+ruminate i < 3
+    speak(i);
+    i++;
+end_ruminate
+sleep

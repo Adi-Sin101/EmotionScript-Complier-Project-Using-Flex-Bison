@@ -1,0 +1,8 @@
+## Test: Basic Persona Declaration
+mind BasicPersona
+awake
+persona Human <<
+    count age;
+>>
+Human h;
+sleep

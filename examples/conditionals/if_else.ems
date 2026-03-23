@@ -1,0 +1,10 @@
+## Test: if_feel with else_feel
+mind IfElse
+awake
+count score -> 2;
+if_feel score > 5
+    speak("high");
+else_feel
+    speak("low");
+end_feel
+sleep

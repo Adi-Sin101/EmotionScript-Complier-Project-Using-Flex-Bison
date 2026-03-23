@@ -1,0 +1,7 @@
+## Test: Assignment with set
+mind AssignVars
+awake
+count age;
+set age -> 21;
+speak(age);
+sleep

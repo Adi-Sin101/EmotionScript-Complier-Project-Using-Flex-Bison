@@ -6,6 +6,8 @@
 #include <stdarg.h>
 #include <math.h>
 #include "symbol_table.h"
+#include "interpreter.h"
+#include "intermediate_code.h"
 
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
@@ -182,11 +184,14 @@ static char *value_to_cstr(RuntimeValue v) {
 
 static void tracef(const char *fmt, ...) {
     va_list args;
+    char msg[1024];
+
     va_start(args, fmt);
-    fprintf(yyout, "[TRACE] ");
-    vfprintf(yyout, fmt, args);
-    fprintf(yyout, "\n");
+    vsnprintf(msg, sizeof(msg), fmt, args);
     va_end(args);
+
+    interpreter_trace(yyout, "%s", msg);
+    icg_emit(msg);
 }
 
 static void semantic_error(const char *msg) {
@@ -1271,6 +1276,8 @@ void yyerror(const char *s) {
 int main(int argc, char **argv) {
     int result;
 
+    icg_reset();
+
     if (argc < 3) {
         printf("Usage: %s <input.tokens> <output.syntax>\n", argv[0]);
         printf("  OR\n");
@@ -1298,6 +1305,7 @@ int main(int argc, char **argv) {
         fprintf(yyout, "\n=== EXECUTION TRACE ===\n");
         (void)execute_block(root_program);
         fprintf(yyout, "=== EXECUTION COMPLETE ===\n");
+        icg_dump(yyout);
     } else {
         fprintf(yyout, "\n=== PARSE: FAILED ===\n");
         fprintf(yyout, "✗ Found %d syntax error(s)\n", syntax_errors);
