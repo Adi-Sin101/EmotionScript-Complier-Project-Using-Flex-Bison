@@ -1,0 +1,16 @@
+## Test: Multiple Objects
+## Purpose: Multiple instances of same persona keep independent state.
+## Expected: [SPEAK] 101 then [SPEAK] 202
+
+mind MultipleObjects
+awake
+persona Student <<
+    count id;
+>>
+Student s1;
+Student s2;
+set s1.id -> 101;
+set s2.id -> 202;
+speak(s1.id);
+speak(s2.id);
+sleep;

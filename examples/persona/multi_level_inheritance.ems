@@ -1,0 +1,17 @@
+## Test: Multi-Level Inheritance
+## Purpose: Chain inheritance A -> B -> C.
+## Expected: [SPEAK] 1 then [SPEAK] 2 then [SPEAK] 3
+
+mind MultiLevelInheritance
+awake
+persona A << count a; >>
+persona B evolves_from A << count b; >>
+persona C evolves_from B << count c; >>
+C c1;
+set c1.a -> 1;
+set c1.b -> 2;
+set c1.c -> 3;
+speak(c1.a);
+speak(c1.b);
+speak(c1.c);
+sleep;

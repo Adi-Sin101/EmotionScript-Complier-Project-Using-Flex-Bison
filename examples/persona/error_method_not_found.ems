@@ -1,0 +1,12 @@
+## Test: Error Method Not Found
+## Purpose: Invoke undefined method on object.
+## Expected: Semantic error for missing greet method.
+
+mind ErrorMethodNotFound
+awake
+persona Student <<
+    count id;
+>>
+Student s1;
+invoke s1.greet();
+sleep;

@@ -1,0 +1,15 @@
+## Test: Method With Parameters
+## Purpose: Pass parameters to a persona method.
+## Expected: [SPEAK] Hello Param
+
+mind MethodWithParams
+awake
+persona Student <<
+    interpret greet(words msg) yields truth <<
+        speak(msg);
+        reflect yes;
+    >>
+>>
+Student s1;
+invoke s1.greet("Hello Param");
+sleep;

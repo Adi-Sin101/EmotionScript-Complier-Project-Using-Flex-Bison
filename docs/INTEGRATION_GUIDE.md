@@ -258,6 +258,43 @@ Lexical Errors (Lexer)
 │
 └─ Output: Error message only, no token returned
 
+---
+
+## Complete Pipeline (End-to-End)
+
+EmotionScript now supports a practical end-to-end pipeline:
+
+`EmotionScript -> Parser -> TAC -> Execution -> Output`
+
+### One-Command Runner
+
+From repository root:
+
+```powershell
+.\run-pipeline.ps1 -InputFile examples/loops/for_basic.ems -Rebuild
+```
+
+### Stage Outputs
+
+For input `examples/loops/for_basic.ems`, the runner creates:
+
+- `pipeline_output/loops/for_basic.syntax.txt`
+    - parser result, semantic diagnostics, execution trace
+- `pipeline_output/loops/for_basic.tac`
+    - generated three-address code
+- `pipeline_output/loops/for_basic.execution.txt`
+    - extracted execution stage only
+- `pipeline_output/loops/for_basic.output.txt`
+    - final user-visible outputs (`[SPEAK]` / `[ALERT]`)
+
+### Pipeline Behavior
+
+1. Build stage: runs Bison, Flex, GCC (when `-Rebuild` or compiler missing).
+2. Parse stage: validates syntax and reports errors with line numbers.
+3. TAC stage: emits intermediate code to `.tac`.
+4. Execution stage: runs executable semantics and logs trace.
+5. Output stage: extracts final emitted outputs from execution trace.
+
 Syntax Errors (Parser)
 │
 ├─ Token doesn't match grammar rule

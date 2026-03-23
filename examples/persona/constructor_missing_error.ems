@@ -1,0 +1,10 @@
+mind TestMissingConstructor
+awake
+
+persona Student <<
+    open count id;
+>>
+
+Student s1(101);
+
+sleep;

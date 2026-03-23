@@ -1,0 +1,12 @@
+## Test: Error Invalid Member
+## Purpose: Access non-existing object attribute.
+## Expected: Semantic error that Student.age does not exist.
+
+mind ErrorInvalidMember
+awake
+persona Student <<
+    count id;
+>>
+Student s1;
+speak(s1.age);
+sleep;

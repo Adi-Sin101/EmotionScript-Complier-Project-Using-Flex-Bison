@@ -29,6 +29,50 @@ gcc lex.yy.c -o emotionscript.exe
 ./emotionscript.exe input.ems output.tokens
 ```
 
+## TAC Generation
+
+The compiler supports TAC (Three Address Code) generation in addition to syntax/execution output.
+
+```powershell
+.\emotionscript.exe <input.ems> <output.syntax> [output.tac]
+```
+
+- If `output.tac` is omitted, TAC is written to `output.tac` in the current working directory.
+- TAC covers expressions, control flow, functions, persona inheritance, object creation, member access, and method calls.
+
+## Regression Run (All Examples)
+
+Use the regression script to rebuild the compiler and generate `.out` + `.tac` for every `examples/**/*.ems` file:
+
+```powershell
+cd backend/compiler
+.\run-regression-tac.ps1
+```
+
+Optional flags:
+
+```powershell
+.\run-regression-tac.ps1 -VerboseLogs
+.\run-regression-tac.ps1 -StopOnFailure
+```
+
+## Complete Pipeline
+
+Run the full pipeline:
+
+`EmotionScript -> Parser -> TAC -> Execution -> Output`
+
+```powershell
+.\run-pipeline.ps1 -InputFile examples/functions/function_with_params.ems -Rebuild
+```
+
+Generated artifacts are written under `pipeline_output/<category>/`:
+
+- `<name>.syntax.txt` : parser + semantic + execution report
+- `<name>.tac` : three-address intermediate code
+- `<name>.execution.txt` : extracted execution trace stage
+- `<name>.output.txt` : final user-visible outputs (`[SPEAK]` / `[ALERT]`)
+
 ## Language Syntax Examples
 
 ### Variable Declaration

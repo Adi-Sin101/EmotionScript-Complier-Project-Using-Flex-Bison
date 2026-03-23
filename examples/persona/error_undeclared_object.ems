@@ -1,0 +1,11 @@
+## Test: Error Undeclared Object
+## Purpose: Use object before declaration.
+## Expected: Semantic error for undeclared object s1.
+
+mind ErrorUndeclaredObject
+awake
+persona Student <<
+    count id;
+>>
+set s1.id -> 101;
+sleep;

@@ -260,7 +260,162 @@ The Bison grammar (`emotionscript.y`) supports:
 
 ---
 
+## 🧾 TAC Output (Three Address Code)
+
+The compiler now emits a structured TAC file for every successful parse.
+
+### CLI Format
+
+```powershell
+.\emotionscript.exe <input.ems> <output.syntax> [output.tac]
+```
+
+- `input.ems`: EmotionScript source file.
+- `output.syntax`: parse/execution report file.
+- `output.tac` (optional): TAC output path.
+    - If omitted, TAC is written to `output.tac` in the current working directory.
+
+### TAC Instruction Format
+
+The generated TAC is line-oriented and uses these core patterns:
+
+- Declarations and assignments:
+    - `DECL <type> <name>`
+    - `<name> = <value|temp>`
+- Expression temporaries:
+    - `$t1 = a + b`
+    - `$t2 = x < y`
+- Control flow:
+    - `IF_FALSE <cond> GOTO L1`
+    - `LABEL L1`
+    - `GOTO L2`
+- Functions:
+    - `FUNC add:` / `END_FUNC add`
+    - `FORMAL a`
+    - `PARAM 10`
+    - `$t3 = CALL add, 2`
+    - `RETURN value`
+- OOP/persona:
+    - `CLASS Student` / `END_CLASS Student`
+    - `CLASS Child EXTENDS Parent`
+    - `ATTR open count id`
+    - `METHOD Student.init:` / `END_METHOD Student.init`
+    - `ALLOC s1, Student`
+    - `CALL_METHOD_IF_EXISTS s1.init, 1`
+    - `$t4 = GET_FIELD s1.id`
+    - `SET_FIELD s1.id, 101`
+    - `$t5 = CALL_METHOD s1.greet, 0`
+
+### Example Commands
+
+```powershell
+# Explicit TAC output file
+.\emotionscript.exe ..\..\examples\functions\function_with_params.ems ..\..\examples\functions\function_with_params.out ..\..\examples\functions\function_with_params.tac
+
+# Default TAC output (writes output.tac in current directory)
+.\emotionscript.exe ..\..\examples\variables\declare.ems ..\..\examples\variables\declare.out
+```
+
+### Sample TAC Snippets
+
+```text
+DECL count a
+DECL count b
+$t1 = a + b
+result = $t1
+```
+
+```text
+CLASS Student
+ATTR open count id
+METHOD Student.init:
+FORMAL x
+id = x
+RETURN yes
+END_METHOD Student.init
+END_CLASS Student
+ALLOC s1, Student
+PARAM 101
+CALL_METHOD_IF_EXISTS s1.init, 1
+```
+
+---
+
 ## 🐛 Troubleshooting
+
+## ⚠️ Error Handling
+
+EmotionScript now reports clearer syntax and semantic diagnostics with line numbers, and continues parsing after many syntax failures using panic-mode recovery.
+
+### Error Message Style
+
+- Syntax:
+
+```text
+Syntax Error at line <N>:
+<detailed parser message>
+Near token: '<token>'
+```
+
+- Semantic:
+
+```text
+Semantic Error at line <N>:
+<meaningful semantic description>
+```
+
+### Covered Cases
+
+- Missing semicolons after declarations/statements.
+- Undeclared variables.
+- Type mismatch in assignment/initialization.
+- Invalid function or method calls (undefined target or wrong argument count).
+
+### Example Outputs
+
+Missing semicolon after declaration:
+
+```text
+Syntax Error at line 10:
+Missing ';' after declaration
+Near token: 'set'
+```
+
+Undeclared variable:
+
+```text
+Semantic Error at line 7:
+Variable 'x' used before declaration
+```
+
+Type mismatch:
+
+```text
+Semantic Error at line 9:
+Type mismatch in assignment to 'a'
+```
+
+Invalid function call:
+
+```text
+Semantic Error at line 7:
+Invalid function call: function 'notExists' is not declared
+```
+
+### Panic-Mode Recovery
+
+The parser attempts to continue after syntax errors by synchronizing at statement/block boundaries, such as:
+
+- `;`
+- `end_feel`
+- `end_ruminate`
+- `>>`
+- `}`
+- `sleep`
+
+This allows multiple syntax errors to be reported in one run instead of stopping at the first error.
+
+---
 
 ### "bison: command not found"
 

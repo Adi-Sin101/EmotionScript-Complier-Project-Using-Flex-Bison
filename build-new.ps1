@@ -67,7 +67,7 @@ function Build-All {
     
     # Step 3: Compile
     Write-Host "`n[3/3] Compiling and linking..." -ForegroundColor Yellow
-    & $CC $CFLAGS $YACC_C $LEX_C symbol_table.c -o $EXECUTABLE
+    & $CC $CFLAGS $YACC_C $LEX_C symbol_table.c interpreter.c intermediate_code.c function_table.c persona_table.c -o $EXECUTABLE
     if ($LASTEXITCODE -ne 0) {
         Write-Host "✗ Compilation failed!" -ForegroundColor Red
         exit 1

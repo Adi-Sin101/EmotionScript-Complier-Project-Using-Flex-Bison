@@ -1,0 +1,12 @@
+## Test: Member Access Chain
+## Purpose: Try nested member access object.member.submember.
+## Expected: If unsupported, syntax error near second dot.
+
+mind MemberAccessChain
+awake
+persona Student <<
+    count id;
+>>
+Student s1;
+speak(s1.id.value);
+sleep;

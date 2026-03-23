@@ -1,0 +1,21 @@
+## Test: Method Override
+## Purpose: Override parent method using reshape.
+## Expected: [SPEAK] Teacher says hi
+
+mind MethodOverride
+awake
+persona Human <<
+    interpret greet() yields truth <<
+        speak("Human says hi");
+        reflect yes;
+    >>
+>>
+persona Teacher evolves_from Human <<
+    reshape interpret greet() yields truth <<
+        speak("Teacher says hi");
+        reflect yes;
+    >>
+>>
+Teacher t1;
+invoke t1.greet();
+sleep;

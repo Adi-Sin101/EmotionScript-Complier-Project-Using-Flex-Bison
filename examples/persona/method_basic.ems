@@ -1,0 +1,13 @@
+## Test: Method Basic
+## Purpose: Define a method inside a persona.
+## Expected: Program parses successfully with no runtime output.
+
+mind MethodBasic
+awake
+persona Student <<
+    interpret greet(words msg) yields truth <<
+        speak("Hi " + msg);
+        reflect yes;
+    >>
+>>
+sleep;

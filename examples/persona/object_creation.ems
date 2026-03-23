@@ -1,0 +1,11 @@
+## Test: Object Creation
+## Purpose: Instantiate an object from a persona.
+## Expected: Program parses and instantiates s1 with no runtime output.
+
+mind ObjectCreation
+awake
+persona Student <<
+    count id;
+>>
+Student s1;
+sleep;

@@ -1,0 +1,17 @@
+mind TestPrivateAccess
+awake
+
+persona Student <<
+    count id;
+
+    interpret init(count x) yields truth <<
+        set id -> x;
+        reflect yes;
+    >>
+>>
+
+Student s1(101);
+
+speak(s1.id);
+
+sleep;

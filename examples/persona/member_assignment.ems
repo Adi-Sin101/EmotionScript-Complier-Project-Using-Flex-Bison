@@ -1,0 +1,13 @@
+## Test: Member Assignment
+## Purpose: Assign value to an object attribute.
+## Expected: [SPEAK] 101
+
+mind MemberAssignment
+awake
+persona Student <<
+    count id;
+>>
+Student s1;
+set s1.id -> 101;
+speak(s1.id);
+sleep;

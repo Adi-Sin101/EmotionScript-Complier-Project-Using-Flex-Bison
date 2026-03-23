@@ -9,6 +9,7 @@
 #include "interpreter.h"
 #include "intermediate_code.h"
 #include "function_table.h"
+#include "persona_table.h"
 
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
@@ -20,6 +21,7 @@ typedef struct Scope Scope;
 
 extern int yylex(void);
 extern int yylineno;
+extern char *yytext;
 extern FILE *yyin;
 extern FILE *yyout;
 
@@ -51,8 +53,10 @@ typedef enum ExprKind {
     EXPR_PREFIX,
     EXPR_POSTFIX,
     EXPR_UNARY_MINUS,
+    EXPR_MEMBER_ACCESS,
     EXPR_CALL_PLACEHOLDER,
-    EXPR_FUNC_CALL
+    EXPR_FUNC_CALL,
+    EXPR_METHOD_CALL
 } ExprKind;
 
 struct FunctionArg {
@@ -64,6 +68,7 @@ struct Expr {
     ExprKind kind;
     int op;
     char *ident;
+    char *member_ident;
     RuntimeValue literal;
     Expr *left;
     Expr *right;
@@ -88,7 +93,10 @@ typedef enum StmtKind {
     ST_CONTINUE,
     ST_FUNC_DECL,
     ST_FUNC_CALL,
-    ST_RETURN
+    ST_RETURN,
+    ST_PERSONA_DECL,
+    ST_OBJ_ASSIGN,
+    ST_METHOD_CALL
 } StmtKind;
 
 struct Branch {
@@ -102,7 +110,14 @@ struct Stmt {
     Stmt *next;
 
     char *name;
+    char *class_name;
+    char *parent_name;
+    char *member_name;
     SymbolType decl_type;
+    AccessModifier access;
+    bool is_method;
+    bool is_override;
+    bool is_static;
     Expr *value_expr;
 
     Expr *expr;
@@ -120,6 +135,10 @@ struct Stmt {
     SymbolType *func_param_types;
     int func_param_count;
     Block *func_body;
+
+    /* For persona object constructor invocation */
+    FunctionArg *ctor_args;
+    int ctor_arg_count;
 };
 
 struct Block {
@@ -143,6 +162,12 @@ struct Scope {
 static Block *root_program = NULL;
 static FunctionTable *global_function_table = NULL;
 static struct Scope *current_scope = NULL;
+static PersonaClassTable *global_persona_classes = NULL;
+static PersonaObjectTable *global_persona_objects = NULL;
+
+static AccessModifier temp_member_access = ACCESS_PRIVATE;
+static bool temp_member_is_static = false;
+static bool temp_member_is_override = false;
 
 /* Temporary storage for function parameters during parsing */
 #define MAX_PARAMS 32
@@ -229,13 +254,11 @@ static void tracef(const char *fmt, ...) {
     va_end(args);
 
     interpreter_trace(yyout, "%s", msg);
-    icg_emit(msg);
 }
 
 static void semantic_error(const char *msg) {
-    char buffer[256];
-    snprintf(buffer, sizeof(buffer), "SEMANTIC ERROR at line %d: %s", yylineno, msg);
-    yyerror(buffer);
+    fprintf(yyout, "✗ Semantic Error at line %d:\n%s\n", yylineno, msg ? msg : "Unknown semantic error");
+    syntax_errors++;
 }
 
 static const char *symbol_type_to_value_name(SymbolType t) {
@@ -360,6 +383,14 @@ static Expr *expr_unary_minus(Expr *inner) {
     return e;
 }
 
+static Expr *expr_member_access(const char *object_name, const char *member_name) {
+    Expr *e = new_expr();
+    e->kind = EXPR_MEMBER_ACCESS;
+    e->ident = strdup(object_name);
+    e->member_ident = strdup(member_name);
+    return e;
+}
+
 static Expr *expr_placeholder_call(void) {
     Expr *e = new_expr();
     e->kind = EXPR_CALL_PLACEHOLDER;
@@ -370,6 +401,17 @@ static Expr *expr_func_call(const char *name, FunctionArg *args, int arg_count) 
     Expr *e = new_expr();
     e->kind = EXPR_FUNC_CALL;
     e->ident = strdup(name);
+    e->args = args;
+    e->arg_count = arg_count;
+    return e;
+}
+
+static Expr *expr_method_call(const char *object_name, const char *method_name,
+                              FunctionArg *args, int arg_count) {
+    Expr *e = new_expr();
+    e->kind = EXPR_METHOD_CALL;
+    e->ident = strdup(object_name);
+    e->member_ident = strdup(method_name);
     e->args = args;
     e->arg_count = arg_count;
     return e;
@@ -391,6 +433,374 @@ static int count_func_args(FunctionArg *args) {
         iter = iter->next;
     }
     return count;
+}
+
+static char *tac_dup(const char *s) {
+    return strdup(s ? s : "");
+}
+
+static const char *tac_op_name(int op) {
+    switch (op) {
+        case OP_PLUS: return "+";
+        case OP_MINUS: return "-";
+        case OP_MUL: return "*";
+        case OP_DIV: return "/";
+        case OP_MOD: return "%";
+        case OP_POWER: return "^";
+        case OP_EQ: return "==";
+        case OP_NEQ: return "!=";
+        case OP_LT: return "<";
+        case OP_GT: return ">";
+        case OP_LEQ: return "<=";
+        case OP_GEQ: return ">=";
+        default: return "?";
+    }
+}
+
+static char *tac_literal(RuntimeValue v) {
+    char buffer[512];
+    switch (v.type) {
+        case VAL_INT:
+            snprintf(buffer, sizeof(buffer), "%d", v.as.i);
+            return tac_dup(buffer);
+        case VAL_FLOAT:
+            snprintf(buffer, sizeof(buffer), "%.6f", v.as.f);
+            return tac_dup(buffer);
+        case VAL_BOOL:
+            return tac_dup(v.as.b ? "yes" : "no");
+        case VAL_STRING:
+            snprintf(buffer, sizeof(buffer), "\"%s\"", v.as.s ? v.as.s : "");
+            return tac_dup(buffer);
+        default:
+            return tac_dup("undef");
+    }
+}
+
+static char *tac_emit_expr(Expr *e);
+
+static int tac_emit_params(FunctionArg *args) {
+    int count = 0;
+    FunctionArg *arg = args;
+    while (arg) {
+        char *place;
+        place = NULL;
+        if (arg->expr) {
+            place = tac_emit_expr(arg->expr);
+            icg_emitf("PARAM %s", place);
+            free(place);
+        }
+        count++;
+        arg = arg->next;
+    }
+    return count;
+}
+
+static void tac_emit_stmt(Stmt *s, const char *break_label, const char *continue_label, const char *persona_name);
+static void tac_emit_block(Block *b, const char *break_label, const char *continue_label, const char *persona_name);
+
+static char *tac_emit_expr(Expr *e) {
+    char *lhs;
+    char *rhs;
+    char *tmp;
+    int argc;
+
+    if (!e) return tac_dup("undef");
+
+    switch (e->kind) {
+        case EXPR_LITERAL:
+            return tac_literal(e->literal);
+
+        case EXPR_VAR:
+            return tac_dup(e->ident);
+
+        case EXPR_UNARY_MINUS:
+            lhs = tac_emit_expr(e->left);
+            tmp = icg_new_temp();
+            icg_emitf("%s = - %s", tmp, lhs);
+            free(lhs);
+            return tmp;
+
+        case EXPR_BINARY:
+            lhs = tac_emit_expr(e->left);
+            rhs = tac_emit_expr(e->right);
+            tmp = icg_new_temp();
+            icg_emitf("%s = %s %s %s", tmp, lhs, tac_op_name(e->op), rhs);
+            free(lhs);
+            free(rhs);
+            return tmp;
+
+        case EXPR_PREFIX:
+            tmp = icg_new_temp();
+            icg_emitf("%s = %s", tmp, e->ident);
+            icg_emitf("%s = %s %s 1", e->ident, e->ident, (e->op == OP_INC ? "+" : "-"));
+            free(tmp);
+            return tac_dup(e->ident);
+
+        case EXPR_POSTFIX:
+            tmp = icg_new_temp();
+            icg_emitf("%s = %s", tmp, e->ident);
+            icg_emitf("%s = %s %s 1", e->ident, e->ident, (e->op == OP_INC ? "+" : "-"));
+            return tmp;
+
+        case EXPR_MEMBER_ACCESS:
+            tmp = icg_new_temp();
+            icg_emitf("%s = GET_FIELD %s.%s", tmp, e->ident, e->member_ident);
+            return tmp;
+
+        case EXPR_CALL_PLACEHOLDER:
+            tmp = icg_new_temp();
+            icg_emitf("%s = CALL_INTRINSIC", tmp);
+            return tmp;
+
+        case EXPR_FUNC_CALL:
+            argc = tac_emit_params(e->args);
+            tmp = icg_new_temp();
+            icg_emitf("%s = CALL %s, %d", tmp, e->ident, argc);
+            return tmp;
+
+        case EXPR_METHOD_CALL:
+            argc = tac_emit_params(e->args);
+            tmp = icg_new_temp();
+            icg_emitf("%s = CALL_METHOD %s.%s, %d", tmp, e->ident, e->member_ident, argc);
+            return tmp;
+
+        default:
+            return tac_dup("undef");
+    }
+}
+
+static void tac_emit_block(Block *b, const char *break_label, const char *continue_label, const char *persona_name) {
+    Stmt *cur;
+    if (!b) return;
+    cur = b->head;
+    while (cur) {
+        tac_emit_stmt(cur, break_label, continue_label, persona_name);
+        cur = cur->next;
+    }
+}
+
+static void tac_emit_stmt(Stmt *s, const char *break_label, const char *continue_label, const char *persona_name) {
+    char *place;
+
+    if (!s) return;
+
+    switch (s->kind) {
+        case ST_NOOP:
+            return;
+
+        case ST_DECL:
+            if (s->decl_type == SYM_UNKNOWN && s->class_name) {
+                int argc;
+                icg_emitf("ALLOC %s, %s", s->name, s->class_name);
+                argc = tac_emit_params(s->ctor_args);
+                icg_emitf("CALL_METHOD_IF_EXISTS %s.init, %d", s->name, argc);
+                return;
+            }
+
+            icg_emitf("DECL %s %s", symbol_type_to_value_name(s->decl_type), s->name);
+            if (s->value_expr) {
+                place = tac_emit_expr(s->value_expr);
+                icg_emitf("%s = %s", s->name, place);
+                free(place);
+            }
+            return;
+
+        case ST_ASSIGN:
+            place = tac_emit_expr(s->value_expr);
+            icg_emitf("%s = %s", s->name, place);
+            free(place);
+            return;
+
+        case ST_OBJ_ASSIGN:
+            place = tac_emit_expr(s->value_expr);
+            icg_emitf("SET_FIELD %s.%s, %s", s->name, s->member_name, place);
+            free(place);
+            return;
+
+        case ST_EXPR:
+            place = tac_emit_expr(s->expr);
+            if (place && place[0] == '$') {
+                icg_emitf("DROP %s", place);
+            }
+            free(place);
+            return;
+
+        case ST_IO_SPEAK:
+        case ST_IO_ALERT:
+            place = tac_emit_expr(s->expr);
+            icg_emitf("%s %s", (s->kind == ST_IO_SPEAK ? "SPEAK" : "ALERT"), place);
+            free(place);
+            return;
+
+        case ST_IO_LISTEN:
+            icg_emitf("LISTEN %s", s->name ? s->name : "_");
+            return;
+
+        case ST_IF: {
+            Branch *br;
+            char *cond;
+            char *next_label = icg_new_label();
+            char *end_label = icg_new_label();
+
+            cond = tac_emit_expr(s->condition);
+            icg_emitf("IF_FALSE %s GOTO %s", cond, next_label);
+            free(cond);
+            tac_emit_block(s->body, break_label, continue_label, persona_name);
+            icg_emitf("GOTO %s", end_label);
+            icg_emitf("LABEL %s", next_label);
+            free(next_label);
+
+            br = s->branches;
+            while (br) {
+                char *branch_next = icg_new_label();
+                cond = tac_emit_expr(br->condition);
+                icg_emitf("IF_FALSE %s GOTO %s", cond, branch_next);
+                free(cond);
+                tac_emit_block(br->body, break_label, continue_label, persona_name);
+                icg_emitf("GOTO %s", end_label);
+                icg_emitf("LABEL %s", branch_next);
+                free(branch_next);
+                br = br->next;
+            }
+
+            if (s->else_body) {
+                tac_emit_block(s->else_body, break_label, continue_label, persona_name);
+            }
+            icg_emitf("LABEL %s", end_label);
+            free(end_label);
+            return;
+        }
+
+        case ST_WHILE: {
+            char *start_label = icg_new_label();
+            char *end_label = icg_new_label();
+            char *cond = NULL;
+
+            icg_emitf("LABEL %s", start_label);
+            cond = tac_emit_expr(s->condition);
+            icg_emitf("IF_FALSE %s GOTO %s", cond, end_label);
+            free(cond);
+            tac_emit_block(s->body, end_label, start_label, persona_name);
+            icg_emitf("GOTO %s", start_label);
+            icg_emitf("LABEL %s", end_label);
+            free(start_label);
+            free(end_label);
+            return;
+        }
+
+        case ST_FOR: {
+            char *start_label = icg_new_label();
+            char *step_label = icg_new_label();
+            char *end_label = icg_new_label();
+            char *cond = NULL;
+
+            if (s->for_init) {
+                tac_emit_stmt(s->for_init, break_label, continue_label, persona_name);
+            }
+
+            icg_emitf("LABEL %s", start_label);
+            if (s->condition) {
+                cond = tac_emit_expr(s->condition);
+                icg_emitf("IF_FALSE %s GOTO %s", cond, end_label);
+                free(cond);
+            }
+
+            tac_emit_block(s->body, end_label, step_label, persona_name);
+            icg_emitf("LABEL %s", step_label);
+            if (s->for_step) {
+                place = tac_emit_expr(s->for_step);
+                free(place);
+            }
+            icg_emitf("GOTO %s", start_label);
+            icg_emitf("LABEL %s", end_label);
+
+            free(start_label);
+            free(step_label);
+            free(end_label);
+            return;
+        }
+
+        case ST_BREAK:
+            if (break_label) {
+                icg_emitf("GOTO %s", break_label);
+            }
+            return;
+
+        case ST_CONTINUE:
+            if (continue_label) {
+                icg_emitf("GOTO %s", continue_label);
+            }
+            return;
+
+        case ST_FUNC_DECL:
+            if (s->is_method) {
+                icg_emitf("METHOD %s.%s:", persona_name ? persona_name : "<persona>", s->name);
+                for (int i = 0; i < s->func_param_count; i++) {
+                    icg_emitf("FORMAL %s", s->func_param_names[i]);
+                }
+                tac_emit_block(s->func_body, NULL, NULL, persona_name);
+                icg_emitf("END_METHOD %s.%s", persona_name ? persona_name : "<persona>", s->name);
+            } else {
+                icg_emitf("FUNC %s:", s->name);
+                for (int i = 0; i < s->func_param_count; i++) {
+                    icg_emitf("FORMAL %s", s->func_param_names[i]);
+                }
+                tac_emit_block(s->func_body, NULL, NULL, persona_name);
+                icg_emitf("END_FUNC %s", s->name);
+            }
+            return;
+
+        case ST_FUNC_CALL:
+        case ST_METHOD_CALL:
+            place = tac_emit_expr(s->expr);
+            if (place && place[0] == '$') {
+                icg_emitf("DROP %s", place);
+            }
+            free(place);
+            return;
+
+        case ST_RETURN:
+            place = tac_emit_expr(s->expr);
+            icg_emitf("RETURN %s", place);
+            free(place);
+            return;
+
+        case ST_PERSONA_DECL: {
+            Stmt *member;
+            if (s->parent_name) {
+                icg_emitf("CLASS %s EXTENDS %s", s->class_name, s->parent_name);
+            } else {
+                icg_emitf("CLASS %s", s->class_name);
+            }
+
+            member = s->body ? s->body->head : NULL;
+            while (member) {
+                if (member->kind == ST_DECL) {
+                    icg_emitf("ATTR %s %s %s%s", 
+                              member->access == ACCESS_PUBLIC ? "open" :
+                              (member->access == ACCESS_PROTECTED ? "guarded" : "hidden"),
+                              symbol_type_to_value_name(member->decl_type),
+                              member->name,
+                              member->is_static ? " static" : "");
+                } else if (member->kind == ST_FUNC_DECL) {
+                    tac_emit_stmt(member, NULL, NULL, s->class_name);
+                }
+                member = member->next;
+            }
+
+            icg_emitf("END_CLASS %s", s->class_name);
+            return;
+        }
+
+        default:
+            return;
+    }
+}
+
+static void generate_tac(Block *program) {
+    icg_reset();
+    icg_emit("; EmotionScript Three Address Code (TAC)");
+    tac_emit_block(program, NULL, NULL, NULL);
 }
 
 
@@ -500,6 +910,90 @@ static Branch *append_branch(Branch *head, Branch *item) {
     return head;
 }
 
+static RuntimeValue object_field_to_runtime(ObjectField *field) {
+    if (!field) return make_undef();
+    return symbol_to_runtime(&field->symbol);
+}
+
+static bool is_public_member(AccessModifier access) {
+    return access == ACCESS_PUBLIC;
+}
+
+static int runtime_to_object_field(ObjectField *field, RuntimeValue v) {
+    if (!field) return 1;
+    return runtime_to_symbol(&field->symbol, v);
+}
+
+static void set_member_parse_context(AccessModifier access, bool is_static, bool is_override) {
+    temp_member_access = access;
+    temp_member_is_static = is_static;
+    temp_member_is_override = is_override;
+}
+
+static void clear_member_parse_context(void) {
+    temp_member_access = ACCESS_PRIVATE;
+    temp_member_is_static = false;
+    temp_member_is_override = false;
+}
+
+static int register_persona_stmt(Stmt *persona_stmt) {
+    PersonaClass *cls;
+    Stmt *member;
+    int insert_result;
+
+    if (!persona_stmt || !persona_stmt->class_name) return 1;
+
+    if (persona_stmt->parent_name && !persona_class_lookup(global_persona_classes, persona_stmt->parent_name)) {
+        semantic_error("Parent persona not declared before child persona");
+        return 1;
+    }
+
+    insert_result = persona_class_insert(global_persona_classes, persona_stmt->class_name, persona_stmt->parent_name);
+    if (insert_result != 0) {
+        semantic_error("Persona redeclaration detected");
+        return 1;
+    }
+
+    cls = persona_class_lookup(global_persona_classes, persona_stmt->class_name);
+    if (!cls) {
+        semantic_error("Failed to register persona");
+        return 1;
+    }
+
+    member = persona_stmt->body ? persona_stmt->body->head : NULL;
+    while (member) {
+        if (member->kind == ST_DECL) {
+            if (persona_class_add_attribute(cls, member->name, member->decl_type,
+                                            member->access, member->is_static) != 0) {
+                semantic_error("Duplicate persona attribute");
+            }
+        } else if (member->kind == ST_FUNC_DECL) {
+            if (member->is_override) {
+                PersonaClass *parent_cls = persona_class_lookup_parent(global_persona_classes, cls);
+                PersonaMethod *parent_method = persona_class_resolve_method(global_persona_classes, parent_cls, member->name);
+                if (!parent_method) {
+                    semantic_error("reshape method does not match any inherited method");
+                }
+            }
+            if (persona_class_add_method(cls, member->name, member->func_return_type,
+                                         member->func_param_names, member->func_param_types,
+                                         member->func_param_count, member->func_body,
+                                         member->access, member->is_override, member->is_static) != 0) {
+                semantic_error("Duplicate persona method");
+            }
+        }
+        member = member->next;
+    }
+
+    tracef("persona %s registered%s", cls->name, cls->parent_name ? " with inheritance" : "");
+    return 0;
+}
+
+static RuntimeValue invoke_persona_method(PersonaObject *obj, const char *method_name,
+                                          FunctionArg *args, int arg_count);
+
+static int invoke_persona_constructor(PersonaObject *obj, FunctionArg *ctor_args, int ctor_arg_count);
+
 static RuntimeValue eval_expr(Expr *e);
 static ExecSignal execute_stmt(Stmt *s);
 static ExecSignal execute_block(Block *b);
@@ -581,11 +1075,40 @@ static RuntimeValue eval_expr(Expr *e) {
             semantic_error("Unary minus requires numeric operand");
             return make_undef();
 
+        case EXPR_MEMBER_ACCESS: {
+            PersonaObject *obj = persona_object_lookup(global_persona_objects, e->ident);
+            ObjectField *field;
+            if (!obj) {
+                char msg[160];
+                snprintf(msg, sizeof(msg), "Object '%s' is not declared", e->ident);
+                semantic_error(msg);
+                return make_undef();
+            }
+            field = persona_object_field_lookup(obj, e->member_ident);
+            if (!field) {
+                char msg[160];
+                snprintf(msg, sizeof(msg), "Member '%s.%s' not found", e->ident, e->member_ident);
+                semantic_error(msg);
+                return make_undef();
+            }
+            if (!is_public_member(field->access)) {
+                char msg[192];
+                snprintf(msg, sizeof(msg), "Cannot access private member '%s.%s'", e->ident, e->member_ident);
+                semantic_error(msg);
+                return make_undef();
+            }
+            return object_field_to_runtime(field);
+        }
+
         case EXPR_PREFIX:
         case EXPR_POSTFIX: {
-            Symbol *sym = lookup_symbol(e->ident);
+            Symbol *sym = current_scope ? scope_lookup_symbol(current_scope, e->ident) : NULL;
             RuntimeValue cur;
             RuntimeValue updated;
+
+            if (!sym) {
+                sym = lookup_symbol(e->ident);
+            }
 
             if (!sym) {
                 char msg[128];
@@ -720,6 +1243,31 @@ static RuntimeValue eval_expr(Expr *e) {
         case EXPR_FUNC_CALL:
             return call_function(e->ident, e->args, e->arg_count);
 
+        case EXPR_METHOD_CALL: {
+            PersonaObject *obj = persona_object_lookup(global_persona_objects, e->ident);
+            PersonaMethod *method;
+            if (!obj) {
+                char msg[160];
+                snprintf(msg, sizeof(msg), "Object '%s' is not declared", e->ident);
+                semantic_error(msg);
+                return make_undef();
+            }
+            method = persona_class_resolve_method(global_persona_classes, obj->class_def, e->member_ident);
+            if (!method) {
+                char msg[192];
+                snprintf(msg, sizeof(msg), "Method '%s.%s' not found", e->ident, e->member_ident);
+                semantic_error(msg);
+                return make_undef();
+            }
+            if (!is_public_member(method->access)) {
+                char msg[192];
+                snprintf(msg, sizeof(msg), "Cannot invoke private method '%s.%s'", e->ident, e->member_ident);
+                semantic_error(msg);
+                return make_undef();
+            }
+            return invoke_persona_method(obj, e->member_ident, e->args, e->arg_count);
+        }
+
         default:
             return make_undef();
     }
@@ -728,7 +1276,9 @@ static RuntimeValue eval_expr(Expr *e) {
 static RuntimeValue call_function(const char *func_name, FunctionArg *args, int arg_count) {
     FunctionDef *func = func_table_lookup(global_function_table, func_name);
     if (!func) {
-        semantic_error("Call to undefined function");
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Invalid function call: function '%s' is not declared", func_name ? func_name : "<unknown>");
+        semantic_error(msg);
         return make_undef();
     }
 
@@ -779,6 +1329,105 @@ static RuntimeValue call_function(const char *func_name, FunctionArg *args, int 
     return result;
 }
 
+static RuntimeValue invoke_persona_method(PersonaObject *obj, const char *method_name,
+                                          FunctionArg *args, int arg_count) {
+    PersonaMethod *method;
+    struct Scope *method_scope;
+    struct Scope *saved_scope;
+    RuntimeValue result = make_undef();
+
+    if (!obj || !method_name) return make_undef();
+
+    method = persona_class_resolve_method(global_persona_classes, obj->class_def, method_name);
+    if (!method) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Invalid method call: method '%s.%s' is not defined", obj->name, method_name);
+        semantic_error(msg);
+        return make_undef();
+    }
+
+    if (arg_count != method->param_count) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Invalid method call: method '%s.%s' expects %d argument(s), got %d",
+                 obj->name, method_name, method->param_count, arg_count);
+        semantic_error(msg);
+        return make_undef();
+    }
+
+    method_scope = scope_create(current_scope);
+    saved_scope = current_scope;
+    current_scope = method_scope;
+
+    scope_insert_symbol(method_scope, "self", SYM_WORDS);
+    {
+        Symbol *self_sym = scope_lookup_symbol(method_scope, "self");
+        if (self_sym) {
+            RuntimeValue self_val = make_string(obj->name);
+            (void)runtime_to_symbol(self_sym, self_val);
+        }
+    }
+
+    {
+        ObjectField *field = obj->fields;
+        while (field) {
+            scope_insert_symbol(method_scope, field->symbol.name, field->symbol.type);
+            {
+                Symbol *local_field = scope_lookup_symbol(method_scope, field->symbol.name);
+                if (local_field && field->symbol.has_value) {
+                    RuntimeValue fv = symbol_to_runtime(&field->symbol);
+                    (void)runtime_to_symbol(local_field, fv);
+                }
+            }
+            field = field->next;
+        }
+    }
+
+    {
+        FunctionArg *arg = args;
+        for (int i = 0; i < method->param_count; i++) {
+            RuntimeValue arg_val;
+            Symbol *param_sym;
+            if (!arg) break;
+            arg_val = eval_expr(arg->expr);
+            scope_insert_symbol(method_scope, method->param_names[i], method->param_types[i]);
+            param_sym = scope_lookup_symbol(method_scope, method->param_names[i]);
+            if (param_sym) {
+                if (runtime_to_symbol(param_sym, arg_val) != 0) {
+                    semantic_error("Incorrect method/constructor parameter type");
+                    current_scope = saved_scope;
+                    scope_free(method_scope);
+                    return make_undef();
+                }
+            }
+            arg = arg->next;
+        }
+    }
+
+    if (method->body) {
+        ExecSignal sig = execute_block((Block *)method->body);
+        if (sig == EXEC_RETURN) {
+            result = method_scope->return_value;
+        }
+    }
+
+    {
+        ObjectField *field = obj->fields;
+        while (field) {
+            Symbol *local_field = scope_lookup_symbol(method_scope, field->symbol.name);
+            if (local_field && local_field->has_value) {
+                RuntimeValue new_val = symbol_to_runtime(local_field);
+                (void)runtime_to_object_field(field, new_val);
+            }
+            field = field->next;
+        }
+    }
+
+    current_scope = saved_scope;
+    scope_free(method_scope);
+
+    return result;
+}
+
 static ExecSignal execute_stmt(Stmt *s) {
     RuntimeValue v;
     Symbol *sym;
@@ -792,7 +1441,29 @@ static ExecSignal execute_stmt(Stmt *s) {
             return EXEC_NORMAL;
 
         case ST_DECL:
-            if (insert_symbol(s->name, s->decl_type) != 0) {
+            if (s->decl_type == SYM_UNKNOWN && s->class_name) {
+                if (persona_object_instantiate(global_persona_objects, global_persona_classes,
+                                              s->class_name, s->name) != 0) {
+                    char msg[192];
+                    snprintf(msg, sizeof(msg), "Failed to instantiate object '%s' of persona '%s'",
+                             s->name, s->class_name);
+                    semantic_error(msg);
+                } else {
+                    PersonaObject *obj = persona_object_lookup(global_persona_objects, s->name);
+                    if (!obj || invoke_persona_constructor(obj, s->ctor_args, s->ctor_arg_count) != 0) {
+                        return EXEC_NORMAL;
+                    }
+                    tracef("instantiate %s as %s", s->name, s->class_name);
+                }
+                return EXEC_NORMAL;
+            }
+            if (current_scope) {
+                if (scope_insert_symbol(current_scope, s->name, s->decl_type) != 0) {
+                    char msg[128];
+                    snprintf(msg, sizeof(msg), "Redeclaration/type conflict for '%s'", s->name);
+                    semantic_error(msg);
+                }
+            } else if (insert_symbol(s->name, s->decl_type) != 0) {
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Redeclaration/type conflict for '%s'", s->name);
                 semantic_error(msg);
@@ -800,7 +1471,10 @@ static ExecSignal execute_stmt(Stmt *s) {
             tracef("declare %s %s", symbol_type_to_value_name(s->decl_type), s->name);
 
             if (s->value_expr) {
-                sym = lookup_symbol(s->name);
+                sym = current_scope ? scope_lookup_symbol(current_scope, s->name) : NULL;
+                if (!sym) {
+                    sym = lookup_symbol(s->name);
+                }
                 v = eval_expr(s->value_expr);
                 if (!sym || runtime_to_symbol(sym, v) != 0) {
                     char msg[128];
@@ -815,7 +1489,10 @@ static ExecSignal execute_stmt(Stmt *s) {
             return EXEC_NORMAL;
 
         case ST_ASSIGN:
-            sym = lookup_symbol(s->name);
+            sym = current_scope ? scope_lookup_symbol(current_scope, s->name) : NULL;
+            if (!sym) {
+                sym = lookup_symbol(s->name);
+            }
             if (!sym) {
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Variable '%s' used before declaration", s->name);
@@ -833,6 +1510,39 @@ static ExecSignal execute_stmt(Stmt *s) {
                 free(txt);
             }
             return EXEC_NORMAL;
+
+        case ST_OBJ_ASSIGN: {
+            PersonaObject *obj = persona_object_lookup(global_persona_objects, s->name);
+            ObjectField *field;
+            if (!obj) {
+                char msg[160];
+                snprintf(msg, sizeof(msg), "Object '%s' is not declared", s->name);
+                semantic_error(msg);
+                return EXEC_NORMAL;
+            }
+            field = persona_object_field_lookup(obj, s->member_name);
+            if (!field) {
+                char msg[192];
+                snprintf(msg, sizeof(msg), "Attribute '%s.%s' does not exist", s->name, s->member_name);
+                semantic_error(msg);
+                return EXEC_NORMAL;
+            }
+            if (!is_public_member(field->access)) {
+                char msg[192];
+                snprintf(msg, sizeof(msg), "Cannot access private member '%s.%s'", s->name, s->member_name);
+                semantic_error(msg);
+                return EXEC_NORMAL;
+            }
+            v = eval_expr(s->value_expr);
+            if (runtime_to_object_field(field, v) != 0) {
+                semantic_error("Type mismatch in object member assignment");
+            } else {
+                txt = value_to_cstr(v);
+                tracef("assign %s.%s = %s", s->name, s->member_name, txt);
+                free(txt);
+            }
+            return EXEC_NORMAL;
+        }
 
         case ST_EXPR:
             (void)eval_expr(s->expr);
@@ -945,6 +1655,9 @@ static ExecSignal execute_stmt(Stmt *s) {
             return EXEC_CONTINUE;
 
         case ST_FUNC_DECL: {
+            if (s->is_method) {
+                return EXEC_NORMAL;
+            }
             if (!global_function_table) {
                 global_function_table = func_table_create();
             }
@@ -960,6 +1673,10 @@ static ExecSignal execute_stmt(Stmt *s) {
             }
             return EXEC_NORMAL;
         }
+
+        case ST_PERSONA_DECL:
+            (void)register_persona_stmt(s);
+            return EXEC_NORMAL;
 
         case ST_RETURN: {
             RuntimeValue ret_val = eval_expr(s->expr);
@@ -977,6 +1694,16 @@ static ExecSignal execute_stmt(Stmt *s) {
                 RuntimeValue result = eval_expr(s->expr);
                 char *vtxt = value_to_cstr(result);
                 tracef("invoke %s => %s", s->name, vtxt);
+                free(vtxt);
+            }
+            return EXEC_NORMAL;
+        }
+
+        case ST_METHOD_CALL: {
+            if (s->expr && s->expr->kind == EXPR_METHOD_CALL) {
+                RuntimeValue result = eval_expr(s->expr);
+                char *vtxt = value_to_cstr(result);
+                tracef("invoke %s.%s => %s", s->name, s->member_name, vtxt);
                 free(vtxt);
             }
             return EXEC_NORMAL;
@@ -1001,9 +1728,44 @@ static ExecSignal execute_block(Block *b) {
     }
     return EXEC_NORMAL;
 }
+
+static int invoke_persona_constructor(PersonaObject *obj, FunctionArg *ctor_args, int ctor_arg_count) {
+    PersonaMethod *ctor;
+    int errors_before;
+    if (!obj || !obj->class_def) return 1;
+
+    ctor = persona_class_resolve_method(global_persona_classes, obj->class_def, "init");
+    if (!ctor) {
+        if (ctor_arg_count > 0) {
+            char msg[192];
+            snprintf(msg, sizeof(msg), "Missing constructor init for '%s' with %d argument(s)",
+                     obj->class_def->name, ctor_arg_count);
+            semantic_error(msg);
+            return 1;
+        }
+        return 0;
+    }
+
+    if (ctor_arg_count != ctor->param_count) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Incorrect constructor parameters for '%s': expected %d, got %d",
+                 obj->class_def->name, ctor->param_count, ctor_arg_count);
+        semantic_error(msg);
+        return 1;
+    }
+
+    errors_before = syntax_errors;
+    (void)invoke_persona_method(obj, "init", ctor_args, ctor_arg_count);
+    if (syntax_errors > errors_before) {
+        return 1;
+    }
+    return 0;
+}
 %}
 
 /* Program structure */
+%error-verbose
+
 %token PROGRAM_MIND PROGRAM_AWAKE PROGRAM_SLEEP PROGRAM_ABORT PROGRAM_SCENE
 
 /* Data types */
@@ -1060,11 +1822,14 @@ static ExecSignal execute_block(Block *b) {
 %type <stmt_ptr> statement declaration_stmt assignment_stmt expression_stmt
 %type <stmt_ptr> conditional_stmt loop_stmt io_stmt return_stmt control_flow_stmt
 %type <stmt_ptr> function_declaration switch_stmt new_switch_stmt new_while_stmt
+%type <stmt_ptr> persona_declaration persona_member
 %type <block_ptr> program_body statement_list function_body
 %type <block_ptr> parameter_list persona_body persona_member_list
 %type <block_ptr> new_case_blocks new_case_block new_default_block switch_body
 %type <func_arg_ptr> argument_list
 %type <branch_ptr> else_if_chain
+%type <int_val> access_modifier
+%type <string_val> callable_name
 
 /* Operator precedence and associativity */
 %nonassoc BARE_ID
@@ -1098,6 +1863,11 @@ program:
         root_program = $4;
         fprintf(yyout, "✓ Valid EmotionScript program\n");
     }
+    | PROGRAM_MIND IDENTIFIER PROGRAM_AWAKE program_body PROGRAM_SLEEP DELIM_SEMICOLON
+    {
+        root_program = $4;
+        fprintf(yyout, "✓ Valid EmotionScript program\n");
+    }
     ;
 
 program_body:
@@ -1120,7 +1890,7 @@ statement:
     | io_stmt { $$ = $1; }
     | return_stmt { $$ = $1; }
     | control_flow_stmt { $$ = $1; }
-    | persona_declaration { $$ = new_stmt(ST_NOOP); }
+    | persona_declaration { $$ = $1; }
     | fsm_declaration { $$ = new_stmt(ST_NOOP); }
     | emotion_based_stmt { $$ = new_stmt(ST_NOOP); }
     | FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON {
@@ -1135,11 +1905,76 @@ statement:
         s->expr = expr_func_call($2, NULL, 0);
         $$ = s;
     }
-    | FUNC_CALL IDENTIFIER DELIM_DOT IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
-    | FUNC_CALL IDENTIFIER DELIM_DOT IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
+    | FUNC_CALL IDENTIFIER DELIM_DOT callable_name DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON {
+        Stmt *s = new_stmt(ST_METHOD_CALL);
+        s->name = strdup($2);
+        s->member_name = strdup($4);
+        s->expr = expr_method_call($2, $4, $6, count_func_args($6));
+        $$ = s;
+    }
+    | FUNC_CALL IDENTIFIER DELIM_DOT callable_name DELIM_LPAREN DELIM_RPAREN DELIM_SEMICOLON {
+        Stmt *s = new_stmt(ST_METHOD_CALL);
+        s->name = strdup($2);
+        s->member_name = strdup($4);
+        s->expr = expr_method_call($2, $4, NULL, 0);
+        $$ = s;
+    }
+    | type_specifier IDENTIFIER error {
+        yyerror("Missing ';' after declaration");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    | ASSIGN_SET IDENTIFIER OP_ARROW expression error {
+        yyerror("Missing ';' after assignment");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    | ASSIGN_SET IDENTIFIER DELIM_DOT IDENTIFIER OP_ARROW expression error {
+        yyerror("Missing ';' after member assignment");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    | FUNC_RETURN expression error {
+        yyerror("Missing ';' after reflect statement");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    | IO_SPEAK DELIM_LPAREN expression DELIM_RPAREN error {
+        yyerror("Missing ';' after speak(...) statement");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    | IO_LISTEN DELIM_LPAREN IDENTIFIER DELIM_RPAREN error {
+        yyerror("Missing ';' after listen(...) statement");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    | IO_ALERT DELIM_LPAREN expression DELIM_RPAREN error {
+        yyerror("Missing ';' after alert(...) statement");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    | expression error {
+        yyerror("Missing ';' after expression statement");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
     | PROGRAM_ABORT DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
     | PROGRAM_SCENE IDENTIFIER DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
     | error DELIM_SEMICOLON { yyerrok; $$ = new_stmt(ST_NOOP); }
+    | error recovery_sync {
+        yyerror("Recovered from invalid statement using panic-mode synchronization");
+        yyerrok;
+        $$ = new_stmt(ST_NOOP);
+    }
+    ;
+
+recovery_sync:
+    COND_END
+    | LOOP_END
+    | DELIM_RSHIFT
+    | DELIM_RBRACE
+    | PROGRAM_SLEEP
     ;
 
 declaration_stmt:
@@ -1155,6 +1990,29 @@ declaration_stmt:
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = SYM_UNKNOWN;
         s->name = strdup($2);
+        s->class_name = strdup($1);
+        s->ctor_args = NULL;
+        s->ctor_arg_count = 0;
+        $$ = s;
+    }
+    | IDENTIFIER IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON
+    {
+        Stmt *s = new_stmt(ST_DECL);
+        s->decl_type = SYM_UNKNOWN;
+        s->name = strdup($2);
+        s->class_name = strdup($1);
+        s->ctor_args = $4;
+        s->ctor_arg_count = count_func_args($4);
+        $$ = s;
+    }
+    | IDENTIFIER IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_SEMICOLON
+    {
+        Stmt *s = new_stmt(ST_DECL);
+        s->decl_type = SYM_UNKNOWN;
+        s->name = strdup($2);
+        s->class_name = strdup($1);
+        s->ctor_args = NULL;
+        s->ctor_arg_count = 0;
         $$ = s;
     }
     | variable_modifier type_specifier IDENTIFIER DELIM_SEMICOLON
@@ -1201,10 +2059,11 @@ assignment_stmt:
     }
     | ASSIGN_SET IDENTIFIER DELIM_DOT IDENTIFIER OP_ARROW expression DELIM_SEMICOLON
     {
-        (void)$2;
-        (void)$4;
-        (void)$6;
-        $$ = new_stmt(ST_NOOP);
+        Stmt *s = new_stmt(ST_OBJ_ASSIGN);
+        s->name = strdup($2);
+        s->member_name = strdup($4);
+        s->value_expr = $6;
+        $$ = s;
     }
     ;
 
@@ -1240,7 +2099,7 @@ primary_expression:
     IDENTIFIER %prec BARE_ID { $$ = expr_var($1); }
     | IDENTIFIER OP_INC { $$ = expr_postfix(OP_INC, $1); }
     | IDENTIFIER OP_DEC { $$ = expr_postfix(OP_DEC, $1); }
-    | IDENTIFIER DELIM_DOT IDENTIFIER { $$ = expr_placeholder_call(); }
+    | IDENTIFIER DELIM_DOT callable_name { $$ = expr_member_access($1, $3); }
     | IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN {
         $$ = expr_func_call($1, $3, count_func_args($3));
     }
@@ -1279,10 +2138,14 @@ primary_expression:
     ;
 
 function_declaration:
-    FUNC_DECLARE IDENTIFIER DELIM_LPAREN parameter_list DELIM_RPAREN FUNC_RETURNS type_specifier DELIM_LSHIFT function_body DELIM_RSHIFT
+    FUNC_DECLARE callable_name DELIM_LPAREN parameter_list DELIM_RPAREN FUNC_RETURNS type_specifier DELIM_LSHIFT function_body DELIM_RSHIFT
     {
         Stmt *s = new_stmt(ST_FUNC_DECL);
         s->name = strdup($2);
+        s->access = temp_member_access;
+        s->is_static = temp_member_is_static;
+        s->is_override = temp_member_is_override;
+        s->is_method = false;
         s->func_return_type = (SymbolType)$7;
         s->func_param_count = temp_param_count;
         
@@ -1299,18 +2162,24 @@ function_declaration:
         }
         s->func_body = $9;
         temp_param_count = 0;
+        clear_member_parse_context();
         $$ = s;
     }
-    | FUNC_DECLARE IDENTIFIER DELIM_LPAREN DELIM_RPAREN FUNC_RETURNS type_specifier DELIM_LSHIFT function_body DELIM_RSHIFT
+    | FUNC_DECLARE callable_name DELIM_LPAREN DELIM_RPAREN FUNC_RETURNS type_specifier DELIM_LSHIFT function_body DELIM_RSHIFT
     {
         Stmt *s = new_stmt(ST_FUNC_DECL);
         s->name = strdup($2);
+        s->access = temp_member_access;
+        s->is_static = temp_member_is_static;
+        s->is_override = temp_member_is_override;
+        s->is_method = false;
         s->func_return_type = (SymbolType)$6;
         s->func_param_names = NULL;
         s->func_param_types = NULL;
         s->func_param_count = 0;
         s->func_body = $8;
         temp_param_count = 0;
+        clear_member_parse_context();
         $$ = s;
     }
     ;
@@ -1524,9 +2393,29 @@ io_stmt:
     }
     ;
 
+callable_name:
+    IDENTIFIER { $$ = strdup($1); }
+    | IO_SPEAK { $$ = strdup("speak"); }
+    | IO_LISTEN { $$ = strdup("listen"); }
+    | IO_ALERT { $$ = strdup("alert"); }
+    ;
+
 persona_declaration:
     CLASS_PERSONA IDENTIFIER DELIM_LSHIFT persona_body DELIM_RSHIFT
+    {
+        Stmt *s = new_stmt(ST_PERSONA_DECL);
+        s->class_name = strdup($2);
+        s->body = $4;
+        $$ = s;
+    }
     | CLASS_PERSONA IDENTIFIER CLASS_INHERIT IDENTIFIER DELIM_LSHIFT persona_body DELIM_RSHIFT
+    {
+        Stmt *s = new_stmt(ST_PERSONA_DECL);
+        s->class_name = strdup($2);
+        s->parent_name = strdup($4);
+        s->body = $6;
+        $$ = s;
+    }
     ;
 
 persona_body:
@@ -1535,25 +2424,84 @@ persona_body:
     ;
 
 persona_member_list:
-    persona_member { $$ = new_block(); }
-    | persona_member_list persona_member { $$ = $1; }
+    persona_member { $$ = append_stmt(new_block(), $1); }
+    | persona_member_list persona_member { $$ = append_stmt($1, $2); }
     ;
 
 persona_member:
     access_modifier variable_modifier type_specifier IDENTIFIER DELIM_SEMICOLON
+    {
+        Stmt *s = new_stmt(ST_DECL);
+        s->decl_type = (SymbolType)$3;
+        s->name = strdup($4);
+        s->access = (AccessModifier)$1;
+        $$ = s;
+    }
     | access_modifier type_specifier IDENTIFIER DELIM_SEMICOLON
+    {
+        Stmt *s = new_stmt(ST_DECL);
+        s->decl_type = (SymbolType)$2;
+        s->name = strdup($3);
+        s->access = (AccessModifier)$1;
+        $$ = s;
+    }
     | variable_modifier type_specifier IDENTIFIER DELIM_SEMICOLON
+    {
+        Stmt *s = new_stmt(ST_DECL);
+        s->decl_type = (SymbolType)$2;
+        s->name = strdup($3);
+        s->access = ACCESS_PRIVATE;
+        $$ = s;
+    }
     | type_specifier IDENTIFIER DELIM_SEMICOLON
-    | access_modifier function_declaration
+    {
+        Stmt *s = new_stmt(ST_DECL);
+        s->decl_type = (SymbolType)$1;
+        s->name = strdup($2);
+        s->access = ACCESS_PRIVATE;
+        $$ = s;
+    }
+    | access_modifier
+      {
+          set_member_parse_context((AccessModifier)$1, false, false);
+      }
+      function_declaration
+      {
+          $3->access = (AccessModifier)$1;
+          $3->is_method = true;
+          $$ = $3;
+      }
     | function_declaration
-    | CLASS_OVERRIDE function_declaration
+      {
+          $1->access = ACCESS_PRIVATE;
+          $1->is_method = true;
+          $$ = $1;
+      }
+    | CLASS_OVERRIDE
+      {
+          set_member_parse_context(ACCESS_PRIVATE, false, true);
+      }
+      function_declaration
+      {
+          $3->is_override = true;
+          $3->is_method = true;
+          $$ = $3;
+      }
     | CLASS_STATIC type_specifier IDENTIFIER DELIM_SEMICOLON
+    {
+        Stmt *s = new_stmt(ST_DECL);
+        s->decl_type = (SymbolType)$2;
+        s->name = strdup($3);
+        s->access = ACCESS_PRIVATE;
+        s->is_static = true;
+        $$ = s;
+    }
     ;
 
 access_modifier:
-    CLASS_OPEN
-    | CLASS_GUARDED
-    | CLASS_HIDDEN
+    CLASS_OPEN { $$ = ACCESS_PUBLIC; }
+    | CLASS_GUARDED { $$ = ACCESS_PROTECTED; }
+    | CLASS_HIDDEN { $$ = ACCESS_PRIVATE; }
     ;
 
 fsm_declaration:
@@ -1576,25 +2524,34 @@ state_list:
 %%
 
 void yyerror(const char *s) {
-    fprintf(yyout, "✗ SYNTAX ERROR at line %d: %s\n", yylineno, s);
+    fprintf(yyout, "✗ Syntax Error at line %d:\n%s\n", yylineno, s ? s : "Invalid syntax");
+    if (yytext && yytext[0] != '\0') {
+        fprintf(yyout, "Near token: '%s'\n", yytext);
+    }
     syntax_errors++;
 }
 
 int main(int argc, char **argv) {
     int result;
+    const char *tac_path;
 
     icg_reset();
     
     /* Initialize global scope for functions */
     global_function_table = func_table_create();
     current_scope = scope_create(NULL);
+    global_persona_classes = persona_class_table_create();
+    global_persona_objects = persona_object_table_create();
 
     if (argc < 3) {
         printf("Usage: %s <input.tokens> <output.syntax>\n", argv[0]);
         printf("  OR\n");
         printf("Usage: %s <input.ems> <output.syntax>\n", argv[0]);
+        printf("Optional: %s <input.ems> <output.syntax> <output.tac>\n", argv[0]);
         return 1;
     }
+
+    tac_path = (argc >= 4) ? argv[3] : "output.tac";
 
     yyin = fopen(argv[1], "r");
     yyout = fopen(argv[2], "w");
@@ -1606,6 +2563,7 @@ int main(int argc, char **argv) {
 
     fprintf(yyout, "=== EmotionScript Syntax + Execution Engine ===\n\n");
 
+    yylineno = 1;
     result = yyparse();
 
     if (result == 0 && syntax_errors == 0) {
@@ -1613,10 +2571,16 @@ int main(int argc, char **argv) {
         fprintf(yyout, "✓ No syntax errors found\n");
         fprintf(yyout, "✓ Program structure is valid\n");
 
+        generate_tac(root_program);
+        if (icg_write_to_file(tac_path) == 0) {
+            fprintf(yyout, "✓ TAC written to %s\n", tac_path);
+        } else {
+            fprintf(yyout, "✗ Failed to write TAC to %s\n", tac_path);
+        }
+
         fprintf(yyout, "\n=== EXECUTION TRACE ===\n");
         (void)execute_block(root_program);
         fprintf(yyout, "=== EXECUTION COMPLETE ===\n");
-        icg_dump(yyout);
     } else {
         fprintf(yyout, "\n=== PARSE: FAILED ===\n");
         fprintf(yyout, "✗ Found %d syntax error(s)\n", syntax_errors);
@@ -1628,6 +2592,8 @@ int main(int argc, char **argv) {
     free_symbol_table();
     if (global_function_table) func_table_free(global_function_table);
     if (current_scope) scope_free(current_scope);
+    if (global_persona_objects) persona_object_table_free(global_persona_objects);
+    if (global_persona_classes) persona_class_table_free(global_persona_classes);
 
     return result;
 }

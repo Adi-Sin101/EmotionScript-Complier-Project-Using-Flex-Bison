@@ -1,10 +1,16 @@
-## Test: Persona Inheritance
-mind PersonaInheritance
+## Test: Inheritance
+## Purpose: Child persona inherits parent attributes.
+## Expected: [SPEAK] 20
+
+mind Inheritance
 awake
-persona Animal <<
-    words species;
+persona Human <<
+    count age;
 >>
-persona Dog evolves_from Animal <<
+persona Student evolves_from Human <<
     count id;
 >>
-sleep
+Student s1;
+set s1.age -> 20;
+speak(s1.age);
+sleep;

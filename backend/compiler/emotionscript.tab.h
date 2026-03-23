@@ -150,7 +150,7 @@ typedef union YYSTYPE
 {
 
 /* Line 1676 of yacc.c  */
-#line 1079 "emotionscript.y"
+#line 1844 "emotionscript.y"
 
     char *string_val;
     int int_val;

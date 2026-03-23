@@ -1,0 +1,15 @@
+mind TestCtorParamError
+awake
+
+persona Student <<
+    open count id;
+
+    interpret init(count x) yields truth <<
+        set id -> x;
+        reflect yes;
+    >>
+>>
+
+Student s1("oops");
+
+sleep;

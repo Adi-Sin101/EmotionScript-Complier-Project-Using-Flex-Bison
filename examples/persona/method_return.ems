@@ -1,0 +1,16 @@
+## Test: Method Return
+## Purpose: Return a value from a method using reflect.
+## Expected: Method invocation returns 101 (visible in interpreter trace for invoke).
+
+mind MethodReturn
+awake
+persona Student <<
+    count id;
+    interpret get_id() yields count <<
+        reflect id;
+    >>
+>>
+Student s1;
+set s1.id -> 101;
+invoke s1.get_id();
+sleep;

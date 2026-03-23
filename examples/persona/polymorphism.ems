@@ -1,0 +1,23 @@
+## Test: Polymorphism
+## Purpose: Dynamic method resolution across parent and child personas.
+## Expected: [SPEAK] Human role then [SPEAK] Teacher role
+
+mind Polymorphism
+awake
+persona Human <<
+    interpret role() yields truth <<
+        speak("Human role");
+        reflect yes;
+    >>
+>>
+persona Teacher evolves_from Human <<
+    reshape interpret role() yields truth <<
+        speak("Teacher role");
+        reflect yes;
+    >>
+>>
+Human h1;
+Teacher t1;
+invoke h1.role();
+invoke t1.role();
+sleep;

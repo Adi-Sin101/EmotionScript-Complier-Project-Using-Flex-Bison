@@ -1,0 +1,15 @@
+## Test: Access Modifiers
+## Purpose: Validate open member access vs default private member access.
+## Expected: open member access succeeds; private member access should raise semantic error.
+
+mind AccessModifiers
+awake
+persona Student <<
+    open count id;
+    count score;
+>>
+Student s1;
+set s1.id -> 101;
+speak(s1.id);
+speak(s1.score);
+sleep;

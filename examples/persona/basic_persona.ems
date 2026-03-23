@@ -1,8 +1,11 @@
-## Test: Basic Persona Declaration
+## Test: Basic Persona Definition
+## Purpose: Persona declaration with attribute definitions only.
+## Expected: Program parses successfully with no runtime output.
+
 mind BasicPersona
 awake
-persona Human <<
-    count age;
+persona Student <<
+    count id;
+    words name;
 >>
-Human h;
-sleep
+sleep;

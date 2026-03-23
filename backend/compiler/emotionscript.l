@@ -64,6 +64,9 @@ FLOAT_LITERAL   {DIGIT}+"."{DIGIT}+
 "speak"                 { return IO_SPEAK; }
 "listen"                { return IO_LISTEN; }
 "alert"                 { return IO_ALERT; }
+"IO_SPEAK"              { return IO_SPEAK; }
+"IO_LISTEN"             { return IO_LISTEN; }
+"IO_ALERT"              { return IO_ALERT; }
 
 
 "yes"                   { yylval.string_val = strdup(yytext); return LIT_BOOL; }

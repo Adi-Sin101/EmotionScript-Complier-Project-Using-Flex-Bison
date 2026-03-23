@@ -1,0 +1,15 @@
+## Test: Method Invocation
+## Purpose: Invoke a persona method using invoke object.method().
+## Expected: [SPEAK] Hello
+
+mind MethodInvocation
+awake
+persona Student <<
+    interpret greet() yields truth <<
+        speak("Hello");
+        reflect yes;
+    >>
+>>
+Student s1;
+invoke s1.greet();
+sleep;
