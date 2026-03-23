@@ -1,0 +1,45 @@
+=== EmotionScript Syntax + Execution Engine ===
+
+✓ Valid EmotionScript program
+
+=== PARSE: SUCCESS ===
+✓ No syntax errors found
+✓ Program structure is valid
+
+=== EXECUTION TRACE ===
+[TRACE] function add declared
+[TRACE] function add: binding 2 parameters
+[TRACE]   arg[0] = 5
+[TRACE]   insert param 'a' result: 0
+[TRACE]   lookup param 'a' result: found
+[TRACE]   param_sym->type = 0 (expected 0), arg_val.type = 1
+[TRACE]   runtime_to_symbol result: 1
+[TRACE] warning: failed to bind parameter a
+[TRACE]   arg[1] = 6
+[TRACE]   insert param 'b' result: 0
+[TRACE]   lookup param 'b' result: found
+[TRACE]   param_sym->type = 0 (expected 0), arg_val.type = 1
+[TRACE]   runtime_to_symbol result: 1
+[TRACE] warning: failed to bind parameter b
+✗ SYNTAX ERROR at line 19: SEMANTIC ERROR at line 19: Plus operator type mismatch
+[TRACE] reflect <undef>
+[TRACE] invoke add => <undef>
+=== EXECUTION COMPLETE ===
+=== INTERMEDIATE CODE (TRACE LOG) ===
+function add declared
+function add: binding 2 parameters
+  arg[0] = 5
+  insert param 'a' result: 0
+  lookup param 'a' result: found
+  param_sym->type = 0 (expected 0), arg_val.type = 1
+  runtime_to_symbol result: 1
+warning: failed to bind parameter a
+  arg[1] = 6
+  insert param 'b' result: 0
+  lookup param 'b' result: found
+  param_sym->type = 0 (expected 0), arg_val.type = 1
+  runtime_to_symbol result: 1
+warning: failed to bind parameter b
+reflect <undef>
+invoke add => <undef>
+=== END INTERMEDIATE CODE ===

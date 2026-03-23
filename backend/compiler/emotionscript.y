@@ -8,11 +8,14 @@
 #include "symbol_table.h"
 #include "interpreter.h"
 #include "intermediate_code.h"
+#include "function_table.h"
 
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
 typedef struct Block Block;
 typedef struct Branch Branch;
+typedef struct FunctionArg FunctionArg;
+typedef struct Scope Scope;
 #include "emotionscript.tab.h"
 
 extern int yylex(void);
@@ -48,8 +51,14 @@ typedef enum ExprKind {
     EXPR_PREFIX,
     EXPR_POSTFIX,
     EXPR_UNARY_MINUS,
-    EXPR_CALL_PLACEHOLDER
+    EXPR_CALL_PLACEHOLDER,
+    EXPR_FUNC_CALL
 } ExprKind;
+
+struct FunctionArg {
+    Expr *expr;
+    struct FunctionArg *next;
+};
 
 struct Expr {
     ExprKind kind;
@@ -58,6 +67,10 @@ struct Expr {
     RuntimeValue literal;
     Expr *left;
     Expr *right;
+    
+    /* For function calls */
+    FunctionArg *args;
+    int arg_count;
 };
 
 typedef enum StmtKind {
@@ -72,7 +85,10 @@ typedef enum StmtKind {
     ST_WHILE,
     ST_FOR,
     ST_BREAK,
-    ST_CONTINUE
+    ST_CONTINUE,
+    ST_FUNC_DECL,
+    ST_FUNC_CALL,
+    ST_RETURN
 } StmtKind;
 
 struct Branch {
@@ -97,6 +113,13 @@ struct Stmt {
 
     Stmt *for_init;
     Expr *for_step;
+    
+    /* For function declarations */
+    SymbolType func_return_type;
+    char **func_param_names;
+    SymbolType *func_param_types;
+    int func_param_count;
+    Block *func_body;
 };
 
 struct Block {
@@ -107,10 +130,25 @@ struct Block {
 typedef enum ExecSignal {
     EXEC_NORMAL,
     EXEC_BREAK,
-    EXEC_CONTINUE
+    EXEC_CONTINUE,
+    EXEC_RETURN
 } ExecSignal;
 
+struct Scope {
+    Symbol *local_vars[SYMBOL_TABLE_SIZE];
+    RuntimeValue return_value;
+    struct Scope *parent;
+};
+
 static Block *root_program = NULL;
+static FunctionTable *global_function_table = NULL;
+static struct Scope *current_scope = NULL;
+
+/* Temporary storage for function parameters during parsing */
+#define MAX_PARAMS 32
+static char *temp_param_names[MAX_PARAMS];
+static SymbolType temp_param_types[MAX_PARAMS];
+static int temp_param_count = 0;
 
 static RuntimeValue make_undef(void) {
     RuntimeValue v;
@@ -261,7 +299,14 @@ static int runtime_to_symbol(Symbol *sym, RuntimeValue v) {
         return 1;
     }
 
-    return update_symbol(sym->name, out);
+    /* Update the symbol directly instead of looking it up again */
+    if (sym->has_value && sym->type == SYM_WORDS && sym->value.str_val) {
+        free(sym->value.str_val);
+        sym->value.str_val = NULL;
+    }
+    sym->value = out;
+    sym->has_value = true;
+    return 0;
 }
 
 static Expr *new_expr(void) {
@@ -319,6 +364,101 @@ static Expr *expr_placeholder_call(void) {
     Expr *e = new_expr();
     e->kind = EXPR_CALL_PLACEHOLDER;
     return e;
+}
+
+static Expr *expr_func_call(const char *name, FunctionArg *args, int arg_count) {
+    Expr *e = new_expr();
+    e->kind = EXPR_FUNC_CALL;
+    e->ident = strdup(name);
+    e->args = args;
+    e->arg_count = arg_count;
+    return e;
+}
+
+static FunctionArg *new_func_arg(Expr *expr) {
+    FunctionArg *arg = (FunctionArg *)calloc(1, sizeof(FunctionArg));
+    if (arg) {
+        arg->expr = expr;
+    }
+    return arg;
+}
+
+static int count_func_args(FunctionArg *args) {
+    int count = 0;
+    FunctionArg *iter = args;
+    while (iter) {
+        count++;
+        iter = iter->next;
+    }
+    return count;
+}
+
+
+/* Scope management */
+static struct Scope *scope_create(struct Scope *parent) {
+    struct Scope *scope = (struct Scope *)calloc(1, sizeof(struct Scope));
+    if (scope) {
+        scope->parent = parent;
+        scope->return_value = make_undef();
+        memset(scope->local_vars, 0, sizeof(scope->local_vars));
+    }
+    return scope;
+}
+
+static void scope_free(struct Scope *scope) {
+    if (!scope) return;
+    for (int i = 0; i < SYMBOL_TABLE_SIZE; i++) {
+        Symbol *iter = scope->local_vars[i];
+        while (iter) {
+            Symbol *next = iter->next;
+            free(iter->name);
+            if (iter->type == SYM_WORDS && iter->has_value && iter->value.str_val) {
+                free(iter->value.str_val);
+            }
+            free(iter);
+            iter = next;
+        }
+    }
+    free(scope);
+}
+
+static int scope_insert_symbol(struct Scope *scope, const char *name, SymbolType type) {
+    if (!scope || !name) return 2;
+    unsigned int h = symbol_hash(name);
+    Symbol *iter = scope->local_vars[h];
+    
+    /* Check if already exists in this scope */
+    while (iter) {
+        if (strcmp(iter->name, name) == 0) {
+            if (iter->type == type) return 0;
+            return 1;
+        }
+        iter = iter->next;
+    }
+
+    Symbol *new_sym = (Symbol *)malloc(sizeof(Symbol));
+    if (!new_sym) return 2;
+    new_sym->name = strdup(name);
+    new_sym->type = type;
+    new_sym->has_value = false;
+    new_sym->next = scope->local_vars[h];
+    scope->local_vars[h] = new_sym;
+    return 0;
+}
+
+static Symbol *scope_lookup_symbol(struct Scope *scope, const char *name) {
+    if (!scope || !name) return NULL;
+    
+    while (scope) {
+        unsigned int h = symbol_hash(name);
+        Symbol *iter = scope->local_vars[h];
+        while (iter) {
+            if (strcmp(iter->name, name) == 0) return iter;
+            iter = iter->next;
+        }
+        scope = scope->parent;
+    }
+    return NULL;
 }
 
 static Stmt *new_stmt(StmtKind kind) {
@@ -399,6 +539,14 @@ static RuntimeValue apply_cmp(int op, RuntimeValue a, RuntimeValue b) {
     return make_undef();
 }
 
+
+
+static RuntimeValue call_function(const char *func_name, FunctionArg *args, int arg_count);
+
+/* Forward declarations for mutual recursion */
+static ExecSignal execute_stmt(Stmt *s);
+static ExecSignal execute_block(Block *b);
+
 static RuntimeValue eval_expr(Expr *e) {
     RuntimeValue lhs;
     RuntimeValue rhs;
@@ -410,7 +558,13 @@ static RuntimeValue eval_expr(Expr *e) {
             return e->literal;
 
         case EXPR_VAR: {
-            Symbol *sym = lookup_symbol(e->ident);
+            Symbol *sym = NULL;
+            if (current_scope) {
+                sym = scope_lookup_symbol(current_scope, e->ident);
+            }
+            if (!sym) {
+                sym = lookup_symbol(e->ident);
+            }
             if (!sym) {
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Variable '%s' used before declaration", e->ident);
@@ -563,9 +717,66 @@ static RuntimeValue eval_expr(Expr *e) {
             tracef("function call expression evaluated as <undef>");
             return make_undef();
 
+        case EXPR_FUNC_CALL:
+            return call_function(e->ident, e->args, e->arg_count);
+
         default:
             return make_undef();
     }
+}
+
+static RuntimeValue call_function(const char *func_name, FunctionArg *args, int arg_count) {
+    FunctionDef *func = func_table_lookup(global_function_table, func_name);
+    if (!func) {
+        semantic_error("Call to undefined function");
+        return make_undef();
+    }
+
+    if (arg_count != func->param_count) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Function '%s' expects %d arguments, got %d", 
+                 func_name, func->param_count, arg_count);
+        semantic_error(msg);
+        return make_undef();
+    }
+
+    /* Create new scope for function execution */
+    struct Scope *func_scope = scope_create(current_scope);
+    struct Scope *saved_scope = current_scope;
+    current_scope = func_scope;
+
+    /* Bind parameters */
+    FunctionArg *arg = args;
+    for (int i = 0; i < func->param_count; i++) {
+        if (!arg) break;
+        RuntimeValue arg_val = eval_expr(arg->expr);
+        scope_insert_symbol(func_scope, func->param_names[i], func->param_types[i]);
+        Symbol *param_sym = scope_lookup_symbol(func_scope, func->param_names[i]);
+        if (param_sym) {
+            if (runtime_to_symbol(param_sym, arg_val) == 0) {
+                param_sym->has_value = true;
+                char *vtxt = value_to_cstr(arg_val);
+                tracef("bind parameter %s = %s", func->param_names[i], vtxt);
+                free(vtxt);
+            }
+        }
+        arg = arg->next;
+    }
+
+    /* Execute function body */
+    RuntimeValue result = make_undef();
+    if (func->body) {
+        ExecSignal sig = execute_block((Block *)func->body);
+        if (sig == EXEC_RETURN) {
+            result = func_scope->return_value;
+        }
+    }
+
+    /* Restore scope */
+    current_scope = saved_scope;
+    scope_free(func_scope);
+
+    return result;
 }
 
 static ExecSignal execute_stmt(Stmt *s) {
@@ -733,6 +944,44 @@ static ExecSignal execute_stmt(Stmt *s) {
             tracef("continue_flow encountered");
             return EXEC_CONTINUE;
 
+        case ST_FUNC_DECL: {
+            if (!global_function_table) {
+                global_function_table = func_table_create();
+            }
+            
+            int result = func_table_insert(global_function_table, s->name, s->func_return_type,
+                                          s->func_param_names, s->func_param_types,
+                                          s->func_param_count, s->func_body);
+            
+            if (result == 0) {
+                tracef("function %s declared", s->name);
+            } else {
+                semantic_error("Failed to register function");
+            }
+            return EXEC_NORMAL;
+        }
+
+        case ST_RETURN: {
+            RuntimeValue ret_val = eval_expr(s->expr);
+            if (current_scope) {
+                current_scope->return_value = ret_val;
+            }
+            char *vtxt = value_to_cstr(ret_val);
+            tracef("reflect %s", vtxt);
+            free(vtxt);
+            return EXEC_RETURN;
+        }
+
+        case ST_FUNC_CALL: {
+            if (s->expr && s->expr->kind == EXPR_FUNC_CALL) {
+                RuntimeValue result = eval_expr(s->expr);
+                char *vtxt = value_to_cstr(result);
+                tracef("invoke %s => %s", s->name, vtxt);
+                free(vtxt);
+            }
+            return EXEC_NORMAL;
+        }
+
         default:
             return EXEC_NORMAL;
     }
@@ -812,8 +1061,9 @@ static ExecSignal execute_block(Block *b) {
 %type <stmt_ptr> conditional_stmt loop_stmt io_stmt return_stmt control_flow_stmt
 %type <stmt_ptr> function_declaration switch_stmt new_switch_stmt new_while_stmt
 %type <block_ptr> program_body statement_list function_body
-%type <block_ptr> parameter_list argument_list persona_body persona_member_list
+%type <block_ptr> parameter_list persona_body persona_member_list
 %type <block_ptr> new_case_blocks new_case_block new_default_block switch_body
+%type <func_arg_ptr> argument_list
 %type <branch_ptr> else_if_chain
 
 /* Operator precedence and associativity */
@@ -835,6 +1085,7 @@ static ExecSignal execute_block(Block *b) {
     struct Stmt *stmt_ptr;
     struct Block *block_ptr;
     struct Branch *branch_ptr;
+    struct FunctionArg *func_arg_ptr;
 }
 
 %start program
@@ -872,8 +1123,18 @@ statement:
     | persona_declaration { $$ = new_stmt(ST_NOOP); }
     | fsm_declaration { $$ = new_stmt(ST_NOOP); }
     | emotion_based_stmt { $$ = new_stmt(ST_NOOP); }
-    | FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
-    | FUNC_CALL IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
+    | FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON {
+        Stmt *s = new_stmt(ST_FUNC_CALL);
+        s->name = strdup($2);
+        s->expr = expr_func_call($2, $4, count_func_args($4));
+        $$ = s;
+    }
+    | FUNC_CALL IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_SEMICOLON {
+        Stmt *s = new_stmt(ST_FUNC_CALL);
+        s->name = strdup($2);
+        s->expr = expr_func_call($2, NULL, 0);
+        $$ = s;
+    }
     | FUNC_CALL IDENTIFIER DELIM_DOT IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
     | FUNC_CALL IDENTIFIER DELIM_DOT IDENTIFIER DELIM_LPAREN DELIM_RPAREN DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
     | PROGRAM_ABORT DELIM_SEMICOLON { $$ = new_stmt(ST_NOOP); }
@@ -980,10 +1241,18 @@ primary_expression:
     | IDENTIFIER OP_INC { $$ = expr_postfix(OP_INC, $1); }
     | IDENTIFIER OP_DEC { $$ = expr_postfix(OP_DEC, $1); }
     | IDENTIFIER DELIM_DOT IDENTIFIER { $$ = expr_placeholder_call(); }
-    | IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN { $$ = expr_placeholder_call(); }
-    | IDENTIFIER DELIM_LPAREN DELIM_RPAREN { $$ = expr_placeholder_call(); }
-    | FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN { $$ = expr_placeholder_call(); }
-    | FUNC_CALL IDENTIFIER DELIM_LPAREN DELIM_RPAREN { $$ = expr_placeholder_call(); }
+    | IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN {
+        $$ = expr_func_call($1, $3, count_func_args($3));
+    }
+    | IDENTIFIER DELIM_LPAREN DELIM_RPAREN {
+        $$ = expr_func_call($1, NULL, 0);
+    }
+    | FUNC_CALL IDENTIFIER DELIM_LPAREN argument_list DELIM_RPAREN {
+        $$ = expr_func_call($2, $4, count_func_args($4));
+    }
+    | FUNC_CALL IDENTIFIER DELIM_LPAREN DELIM_RPAREN {
+        $$ = expr_func_call($2, NULL, 0);
+    }
     | LIT_INT { $$ = expr_literal(make_int(atoi($1))); }
     | LIT_FLOAT { $$ = expr_literal(make_float(strtod($1, NULL))); }
     | LIT_STRING
@@ -1012,11 +1281,37 @@ primary_expression:
 function_declaration:
     FUNC_DECLARE IDENTIFIER DELIM_LPAREN parameter_list DELIM_RPAREN FUNC_RETURNS type_specifier DELIM_LSHIFT function_body DELIM_RSHIFT
     {
-        $$ = new_stmt(ST_NOOP);
+        Stmt *s = new_stmt(ST_FUNC_DECL);
+        s->name = strdup($2);
+        s->func_return_type = (SymbolType)$7;
+        s->func_param_count = temp_param_count;
+        
+        if (temp_param_count > 0) {
+            s->func_param_names = (char **)malloc(temp_param_count * sizeof(char *));
+            s->func_param_types = (SymbolType *)malloc(temp_param_count * sizeof(SymbolType));
+            for (int i = 0; i < temp_param_count; i++) {
+                s->func_param_names[i] = temp_param_names[i];
+                s->func_param_types[i] = temp_param_types[i];
+            }
+        } else {
+            s->func_param_names = NULL;
+            s->func_param_types = NULL;
+        }
+        s->func_body = $9;
+        temp_param_count = 0;
+        $$ = s;
     }
     | FUNC_DECLARE IDENTIFIER DELIM_LPAREN DELIM_RPAREN FUNC_RETURNS type_specifier DELIM_LSHIFT function_body DELIM_RSHIFT
     {
-        $$ = new_stmt(ST_NOOP);
+        Stmt *s = new_stmt(ST_FUNC_DECL);
+        s->name = strdup($2);
+        s->func_return_type = (SymbolType)$6;
+        s->func_param_names = NULL;
+        s->func_param_types = NULL;
+        s->func_param_count = 0;
+        s->func_body = $8;
+        temp_param_count = 0;
+        $$ = s;
     }
     ;
 
@@ -1028,8 +1323,11 @@ parameter_list:
 parameter:
     type_specifier IDENTIFIER
     {
-        (void)$1;
-        (void)$2;
+        if (temp_param_count < MAX_PARAMS) {
+            temp_param_names[temp_param_count] = strdup($2);
+            temp_param_types[temp_param_count] = (SymbolType)$1;
+            temp_param_count++;
+        }
     }
     ;
 
@@ -1040,14 +1338,23 @@ function_body:
 return_stmt:
     FUNC_RETURN expression DELIM_SEMICOLON
     {
-        (void)$2;
-        $$ = new_stmt(ST_NOOP);
+        Stmt *s = new_stmt(ST_RETURN);
+        s->expr = $2;
+        $$ = s;
     }
     ;
 
 argument_list:
-    expression { $$ = new_block(); }
-    | argument_list DELIM_COMMA expression { $$ = $1; }
+    expression { 
+        $$ = new_func_arg($1);
+    }
+    | argument_list DELIM_COMMA expression { 
+        FunctionArg *arg = new_func_arg($3);
+        FunctionArg *tail = $1;
+        while (tail->next) tail = tail->next;
+        tail->next = arg;
+        $$ = $1;
+    }
     ;
 
 math_function:
@@ -1277,6 +1584,10 @@ int main(int argc, char **argv) {
     int result;
 
     icg_reset();
+    
+    /* Initialize global scope for functions */
+    global_function_table = func_table_create();
+    current_scope = scope_create(NULL);
 
     if (argc < 3) {
         printf("Usage: %s <input.tokens> <output.syntax>\n", argv[0]);
@@ -1315,6 +1626,8 @@ int main(int argc, char **argv) {
     fclose(yyin);
     fclose(yyout);
     free_symbol_table();
+    if (global_function_table) func_table_free(global_function_table);
+    if (current_scope) scope_free(current_scope);
 
     return result;
 }

@@ -13,7 +13,7 @@ YACC_H = emotionscript.tab.h
 
 TARGET = emotionscript.exe
 
-MODULE_SRCS = symbol_table.c interpreter.c intermediate_code.c
+MODULE_SRCS = symbol_table.c interpreter.c intermediate_code.c function_table.c
 
 WORKSPACE_ROOT = ../..
 FILE ?= examples/variables/declare.ems

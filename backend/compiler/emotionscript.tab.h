@@ -150,7 +150,7 @@ typedef union YYSTYPE
 {
 
 /* Line 1676 of yacc.c  */
-#line 829 "emotionscript.y"
+#line 1079 "emotionscript.y"
 
     char *string_val;
     int int_val;
@@ -160,11 +160,12 @@ typedef union YYSTYPE
     struct Stmt *stmt_ptr;
     struct Block *block_ptr;
     struct Branch *branch_ptr;
+    struct FunctionArg *func_arg_ptr;
 
 
 
 /* Line 1676 of yacc.c  */
-#line 168 "emotionscript.tab.h"
+#line 169 "emotionscript.tab.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

@@ -79,11 +79,14 @@
 #include "symbol_table.h"
 #include "interpreter.h"
 #include "intermediate_code.h"
+#include "function_table.h"
 
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
 typedef struct Block Block;
 typedef struct Branch Branch;
+typedef struct FunctionArg FunctionArg;
+typedef struct Scope Scope;
 #include "emotionscript.tab.h"
 
 extern int yylex(void);
@@ -119,8 +122,14 @@ typedef enum ExprKind {
     EXPR_PREFIX,
     EXPR_POSTFIX,
     EXPR_UNARY_MINUS,
-    EXPR_CALL_PLACEHOLDER
+    EXPR_CALL_PLACEHOLDER,
+    EXPR_FUNC_CALL
 } ExprKind;
+
+struct FunctionArg {
+    Expr *expr;
+    struct FunctionArg *next;
+};
 
 struct Expr {
     ExprKind kind;
@@ -129,6 +138,10 @@ struct Expr {
     RuntimeValue literal;
     Expr *left;
     Expr *right;
+    
+    /* For function calls */
+    FunctionArg *args;
+    int arg_count;
 };
 
 typedef enum StmtKind {
@@ -143,7 +156,10 @@ typedef enum StmtKind {
     ST_WHILE,
     ST_FOR,
     ST_BREAK,
-    ST_CONTINUE
+    ST_CONTINUE,
+    ST_FUNC_DECL,
+    ST_FUNC_CALL,
+    ST_RETURN
 } StmtKind;
 
 struct Branch {
@@ -168,6 +184,13 @@ struct Stmt {
 
     Stmt *for_init;
     Expr *for_step;
+    
+    /* For function declarations */
+    SymbolType func_return_type;
+    char **func_param_names;
+    SymbolType *func_param_types;
+    int func_param_count;
+    Block *func_body;
 };
 
 struct Block {
@@ -178,10 +201,25 @@ struct Block {
 typedef enum ExecSignal {
     EXEC_NORMAL,
     EXEC_BREAK,
-    EXEC_CONTINUE
+    EXEC_CONTINUE,
+    EXEC_RETURN
 } ExecSignal;
 
+struct Scope {
+    Symbol *local_vars[SYMBOL_TABLE_SIZE];
+    RuntimeValue return_value;
+    struct Scope *parent;
+};
+
 static Block *root_program = NULL;
+static FunctionTable *global_function_table = NULL;
+static struct Scope *current_scope = NULL;
+
+/* Temporary storage for function parameters during parsing */
+#define MAX_PARAMS 32
+static char *temp_param_names[MAX_PARAMS];
+static SymbolType temp_param_types[MAX_PARAMS];
+static int temp_param_count = 0;
 
 static RuntimeValue make_undef(void) {
     RuntimeValue v;
@@ -332,7 +370,14 @@ static int runtime_to_symbol(Symbol *sym, RuntimeValue v) {
         return 1;
     }
 
-    return update_symbol(sym->name, out);
+    /* Update the symbol directly instead of looking it up again */
+    if (sym->has_value && sym->type == SYM_WORDS && sym->value.str_val) {
+        free(sym->value.str_val);
+        sym->value.str_val = NULL;
+    }
+    sym->value = out;
+    sym->has_value = true;
+    return 0;
 }
 
 static Expr *new_expr(void) {
@@ -390,6 +435,101 @@ static Expr *expr_placeholder_call(void) {
     Expr *e = new_expr();
     e->kind = EXPR_CALL_PLACEHOLDER;
     return e;
+}
+
+static Expr *expr_func_call(const char *name, FunctionArg *args, int arg_count) {
+    Expr *e = new_expr();
+    e->kind = EXPR_FUNC_CALL;
+    e->ident = strdup(name);
+    e->args = args;
+    e->arg_count = arg_count;
+    return e;
+}
+
+static FunctionArg *new_func_arg(Expr *expr) {
+    FunctionArg *arg = (FunctionArg *)calloc(1, sizeof(FunctionArg));
+    if (arg) {
+        arg->expr = expr;
+    }
+    return arg;
+}
+
+static int count_func_args(FunctionArg *args) {
+    int count = 0;
+    FunctionArg *iter = args;
+    while (iter) {
+        count++;
+        iter = iter->next;
+    }
+    return count;
+}
+
+
+/* Scope management */
+static struct Scope *scope_create(struct Scope *parent) {
+    struct Scope *scope = (struct Scope *)calloc(1, sizeof(struct Scope));
+    if (scope) {
+        scope->parent = parent;
+        scope->return_value = make_undef();
+        memset(scope->local_vars, 0, sizeof(scope->local_vars));
+    }
+    return scope;
+}
+
+static void scope_free(struct Scope *scope) {
+    if (!scope) return;
+    for (int i = 0; i < SYMBOL_TABLE_SIZE; i++) {
+        Symbol *iter = scope->local_vars[i];
+        while (iter) {
+            Symbol *next = iter->next;
+            free(iter->name);
+            if (iter->type == SYM_WORDS && iter->has_value && iter->value.str_val) {
+                free(iter->value.str_val);
+            }
+            free(iter);
+            iter = next;
+        }
+    }
+    free(scope);
+}
+
+static int scope_insert_symbol(struct Scope *scope, const char *name, SymbolType type) {
+    if (!scope || !name) return 2;
+    unsigned int h = symbol_hash(name);
+    Symbol *iter = scope->local_vars[h];
+    
+    /* Check if already exists in this scope */
+    while (iter) {
+        if (strcmp(iter->name, name) == 0) {
+            if (iter->type == type) return 0;
+            return 1;
+        }
+        iter = iter->next;
+    }
+
+    Symbol *new_sym = (Symbol *)malloc(sizeof(Symbol));
+    if (!new_sym) return 2;
+    new_sym->name = strdup(name);
+    new_sym->type = type;
+    new_sym->has_value = false;
+    new_sym->next = scope->local_vars[h];
+    scope->local_vars[h] = new_sym;
+    return 0;
+}
+
+static Symbol *scope_lookup_symbol(struct Scope *scope, const char *name) {
+    if (!scope || !name) return NULL;
+    
+    while (scope) {
+        unsigned int h = symbol_hash(name);
+        Symbol *iter = scope->local_vars[h];
+        while (iter) {
+            if (strcmp(iter->name, name) == 0) return iter;
+            iter = iter->next;
+        }
+        scope = scope->parent;
+    }
+    return NULL;
 }
 
 static Stmt *new_stmt(StmtKind kind) {
@@ -470,6 +610,14 @@ static RuntimeValue apply_cmp(int op, RuntimeValue a, RuntimeValue b) {
     return make_undef();
 }
 
+
+
+static RuntimeValue call_function(const char *func_name, FunctionArg *args, int arg_count);
+
+/* Forward declarations for mutual recursion */
+static ExecSignal execute_stmt(Stmt *s);
+static ExecSignal execute_block(Block *b);
+
 static RuntimeValue eval_expr(Expr *e) {
     RuntimeValue lhs;
     RuntimeValue rhs;
@@ -481,7 +629,13 @@ static RuntimeValue eval_expr(Expr *e) {
             return e->literal;
 
         case EXPR_VAR: {
-            Symbol *sym = lookup_symbol(e->ident);
+            Symbol *sym = NULL;
+            if (current_scope) {
+                sym = scope_lookup_symbol(current_scope, e->ident);
+            }
+            if (!sym) {
+                sym = lookup_symbol(e->ident);
+            }
             if (!sym) {
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Variable '%s' used before declaration", e->ident);
@@ -634,9 +788,66 @@ static RuntimeValue eval_expr(Expr *e) {
             tracef("function call expression evaluated as <undef>");
             return make_undef();
 
+        case EXPR_FUNC_CALL:
+            return call_function(e->ident, e->args, e->arg_count);
+
         default:
             return make_undef();
     }
+}
+
+static RuntimeValue call_function(const char *func_name, FunctionArg *args, int arg_count) {
+    FunctionDef *func = func_table_lookup(global_function_table, func_name);
+    if (!func) {
+        semantic_error("Call to undefined function");
+        return make_undef();
+    }
+
+    if (arg_count != func->param_count) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Function '%s' expects %d arguments, got %d", 
+                 func_name, func->param_count, arg_count);
+        semantic_error(msg);
+        return make_undef();
+    }
+
+    /* Create new scope for function execution */
+    struct Scope *func_scope = scope_create(current_scope);
+    struct Scope *saved_scope = current_scope;
+    current_scope = func_scope;
+
+    /* Bind parameters */
+    FunctionArg *arg = args;
+    for (int i = 0; i < func->param_count; i++) {
+        if (!arg) break;
+        RuntimeValue arg_val = eval_expr(arg->expr);
+        scope_insert_symbol(func_scope, func->param_names[i], func->param_types[i]);
+        Symbol *param_sym = scope_lookup_symbol(func_scope, func->param_names[i]);
+        if (param_sym) {
+            if (runtime_to_symbol(param_sym, arg_val) == 0) {
+                param_sym->has_value = true;
+                char *vtxt = value_to_cstr(arg_val);
+                tracef("bind parameter %s = %s", func->param_names[i], vtxt);
+                free(vtxt);
+            }
+        }
+        arg = arg->next;
+    }
+
+    /* Execute function body */
+    RuntimeValue result = make_undef();
+    if (func->body) {
+        ExecSignal sig = execute_block((Block *)func->body);
+        if (sig == EXEC_RETURN) {
+            result = func_scope->return_value;
+        }
+    }
+
+    /* Restore scope */
+    current_scope = saved_scope;
+    scope_free(func_scope);
+
+    return result;
 }
 
 static ExecSignal execute_stmt(Stmt *s) {
@@ -804,6 +1015,44 @@ static ExecSignal execute_stmt(Stmt *s) {
             tracef("continue_flow encountered");
             return EXEC_CONTINUE;
 
+        case ST_FUNC_DECL: {
+            if (!global_function_table) {
+                global_function_table = func_table_create();
+            }
+            
+            int result = func_table_insert(global_function_table, s->name, s->func_return_type,
+                                          s->func_param_names, s->func_param_types,
+                                          s->func_param_count, s->func_body);
+            
+            if (result == 0) {
+                tracef("function %s declared", s->name);
+            } else {
+                semantic_error("Failed to register function");
+            }
+            return EXEC_NORMAL;
+        }
+
+        case ST_RETURN: {
+            RuntimeValue ret_val = eval_expr(s->expr);
+            if (current_scope) {
+                current_scope->return_value = ret_val;
+            }
+            char *vtxt = value_to_cstr(ret_val);
+            tracef("reflect %s", vtxt);
+            free(vtxt);
+            return EXEC_RETURN;
+        }
+
+        case ST_FUNC_CALL: {
+            if (s->expr && s->expr->kind == EXPR_FUNC_CALL) {
+                RuntimeValue result = eval_expr(s->expr);
+                char *vtxt = value_to_cstr(result);
+                tracef("invoke %s => %s", s->name, vtxt);
+                free(vtxt);
+            }
+            return EXEC_NORMAL;
+        }
+
         default:
             return EXEC_NORMAL;
     }
@@ -826,7 +1075,7 @@ static ExecSignal execute_block(Block *b) {
 
 
 /* Line 189 of yacc.c  */
-#line 830 "emotionscript.tab.c"
+#line 1079 "emotionscript.tab.c"
 
 /* Enabling traces.  */
 #ifndef YYDEBUG
@@ -964,7 +1213,7 @@ typedef union YYSTYPE
 {
 
 /* Line 214 of yacc.c  */
-#line 829 "emotionscript.y"
+#line 1079 "emotionscript.y"
 
     char *string_val;
     int int_val;
@@ -974,11 +1223,12 @@ typedef union YYSTYPE
     struct Stmt *stmt_ptr;
     struct Block *block_ptr;
     struct Branch *branch_ptr;
+    struct FunctionArg *func_arg_ptr;
 
 
 
 /* Line 214 of yacc.c  */
-#line 982 "emotionscript.tab.c"
+#line 1232 "emotionscript.tab.c"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
@@ -990,7 +1240,7 @@ typedef union YYSTYPE
 
 
 /* Line 264 of yacc.c  */
-#line 994 "emotionscript.tab.c"
+#line 1244 "emotionscript.tab.c"
 
 #ifdef short
 # undef short
@@ -1355,22 +1605,22 @@ static const yytype_int16 yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] =
 {
-       0,   845,   845,   853,   854,   858,   859,   863,   864,   865,
-     866,   867,   868,   869,   870,   871,   872,   873,   874,   875,
-     876,   877,   878,   879,   880,   881,   885,   892,   899,   906,
-     917,   918,   919,   920,   921,   922,   923,   927,   928,   929,
-     930,   934,   941,   951,   960,   961,   962,   963,   964,   965,
-     966,   967,   968,   969,   970,   971,   972,   973,   974,   975,
-     979,   980,   981,   982,   983,   984,   985,   986,   987,   988,
-     989,  1006,  1007,  1008,  1009,  1013,  1017,  1024,  1025,  1029,
-    1037,  1041,  1049,  1050,  1054,  1055,  1056,  1057,  1058,  1059,
-    1060,  1061,  1062,  1063,  1064,  1065,  1066,  1070,  1077,  1085,
-    1093,  1102,  1103,  1107,  1111,  1115,  1122,  1131,  1132,  1136,
-    1137,  1138,  1142,  1151,  1152,  1153,  1157,  1161,  1165,  1172,
-    1181,  1185,  1195,  1196,  1200,  1206,  1212,  1221,  1222,  1226,
-    1227,  1231,  1232,  1236,  1237,  1238,  1239,  1240,  1241,  1242,
-    1243,  1247,  1248,  1249,  1253,  1254,  1255,  1259,  1260,  1261,
-    1265,  1266
+       0,  1096,  1096,  1104,  1105,  1109,  1110,  1114,  1115,  1116,
+    1117,  1118,  1119,  1120,  1121,  1122,  1123,  1124,  1125,  1126,
+    1132,  1138,  1139,  1140,  1141,  1142,  1146,  1153,  1160,  1167,
+    1178,  1179,  1180,  1181,  1182,  1183,  1184,  1188,  1189,  1190,
+    1191,  1195,  1202,  1212,  1221,  1222,  1223,  1224,  1225,  1226,
+    1227,  1228,  1229,  1230,  1231,  1232,  1233,  1234,  1235,  1236,
+    1240,  1241,  1242,  1243,  1244,  1247,  1250,  1253,  1256,  1257,
+    1258,  1275,  1276,  1277,  1278,  1282,  1304,  1319,  1320,  1324,
+    1335,  1339,  1348,  1351,  1361,  1362,  1363,  1364,  1365,  1366,
+    1367,  1368,  1369,  1370,  1371,  1372,  1373,  1377,  1384,  1392,
+    1400,  1409,  1410,  1414,  1418,  1422,  1429,  1438,  1439,  1443,
+    1444,  1445,  1449,  1458,  1459,  1460,  1464,  1468,  1472,  1479,
+    1488,  1492,  1502,  1503,  1507,  1513,  1519,  1528,  1529,  1533,
+    1534,  1538,  1539,  1543,  1544,  1545,  1546,  1547,  1548,  1549,
+    1550,  1554,  1555,  1556,  1560,  1561,  1562,  1566,  1567,  1568,
+    1572,  1573
 };
 #endif
 
@@ -3067,7 +3317,7 @@ yyreduce:
         case 2:
 
 /* Line 1455 of yacc.c  */
-#line 846 "emotionscript.y"
+#line 1097 "emotionscript.y"
     {
         root_program = (yyvsp[(4) - (5)].block_ptr);
         fprintf(yyout, "✓ Valid EmotionScript program\n");
@@ -3077,168 +3327,178 @@ yyreduce:
   case 3:
 
 /* Line 1455 of yacc.c  */
-#line 853 "emotionscript.y"
+#line 1104 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 4:
 
 /* Line 1455 of yacc.c  */
-#line 854 "emotionscript.y"
+#line 1105 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 5:
 
 /* Line 1455 of yacc.c  */
-#line 858 "emotionscript.y"
+#line 1109 "emotionscript.y"
     { (yyval.block_ptr) = append_stmt(new_block(), (yyvsp[(1) - (1)].stmt_ptr)); ;}
     break;
 
   case 6:
 
 /* Line 1455 of yacc.c  */
-#line 859 "emotionscript.y"
+#line 1110 "emotionscript.y"
     { (yyval.block_ptr) = append_stmt((yyvsp[(1) - (2)].block_ptr), (yyvsp[(2) - (2)].stmt_ptr)); ;}
     break;
 
   case 7:
 
 /* Line 1455 of yacc.c  */
-#line 863 "emotionscript.y"
+#line 1114 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 8:
 
 /* Line 1455 of yacc.c  */
-#line 864 "emotionscript.y"
+#line 1115 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 9:
 
 /* Line 1455 of yacc.c  */
-#line 865 "emotionscript.y"
+#line 1116 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 10:
 
 /* Line 1455 of yacc.c  */
-#line 866 "emotionscript.y"
+#line 1117 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 11:
 
 /* Line 1455 of yacc.c  */
-#line 867 "emotionscript.y"
+#line 1118 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 12:
 
 /* Line 1455 of yacc.c  */
-#line 868 "emotionscript.y"
+#line 1119 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 13:
 
 /* Line 1455 of yacc.c  */
-#line 869 "emotionscript.y"
+#line 1120 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 14:
 
 /* Line 1455 of yacc.c  */
-#line 870 "emotionscript.y"
+#line 1121 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 15:
 
 /* Line 1455 of yacc.c  */
-#line 871 "emotionscript.y"
+#line 1122 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 16:
 
 /* Line 1455 of yacc.c  */
-#line 872 "emotionscript.y"
+#line 1123 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 17:
 
 /* Line 1455 of yacc.c  */
-#line 873 "emotionscript.y"
+#line 1124 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 18:
 
 /* Line 1455 of yacc.c  */
-#line 874 "emotionscript.y"
+#line 1125 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 19:
 
 /* Line 1455 of yacc.c  */
-#line 875 "emotionscript.y"
-    { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
+#line 1126 "emotionscript.y"
+    {
+        Stmt *s = new_stmt(ST_FUNC_CALL);
+        s->name = strdup((yyvsp[(2) - (6)].string_val));
+        s->expr = expr_func_call((yyvsp[(2) - (6)].string_val), (yyvsp[(4) - (6)].func_arg_ptr), count_func_args((yyvsp[(4) - (6)].func_arg_ptr)));
+        (yyval.stmt_ptr) = s;
+    ;}
     break;
 
   case 20:
 
 /* Line 1455 of yacc.c  */
-#line 876 "emotionscript.y"
-    { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
+#line 1132 "emotionscript.y"
+    {
+        Stmt *s = new_stmt(ST_FUNC_CALL);
+        s->name = strdup((yyvsp[(2) - (5)].string_val));
+        s->expr = expr_func_call((yyvsp[(2) - (5)].string_val), NULL, 0);
+        (yyval.stmt_ptr) = s;
+    ;}
     break;
 
   case 21:
 
 /* Line 1455 of yacc.c  */
-#line 877 "emotionscript.y"
+#line 1138 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 22:
 
 /* Line 1455 of yacc.c  */
-#line 878 "emotionscript.y"
+#line 1139 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 23:
 
 /* Line 1455 of yacc.c  */
-#line 879 "emotionscript.y"
+#line 1140 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 24:
 
 /* Line 1455 of yacc.c  */
-#line 880 "emotionscript.y"
+#line 1141 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 25:
 
 /* Line 1455 of yacc.c  */
-#line 881 "emotionscript.y"
+#line 1142 "emotionscript.y"
     { yyerrok; (yyval.stmt_ptr) = new_stmt(ST_NOOP); ;}
     break;
 
   case 26:
 
 /* Line 1455 of yacc.c  */
-#line 886 "emotionscript.y"
+#line 1147 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = (SymbolType)(yyvsp[(1) - (3)].symbol_type);
@@ -3250,7 +3510,7 @@ yyreduce:
   case 27:
 
 /* Line 1455 of yacc.c  */
-#line 893 "emotionscript.y"
+#line 1154 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = SYM_UNKNOWN;
@@ -3262,7 +3522,7 @@ yyreduce:
   case 28:
 
 /* Line 1455 of yacc.c  */
-#line 900 "emotionscript.y"
+#line 1161 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = (SymbolType)(yyvsp[(2) - (4)].symbol_type);
@@ -3274,7 +3534,7 @@ yyreduce:
   case 29:
 
 /* Line 1455 of yacc.c  */
-#line 907 "emotionscript.y"
+#line 1168 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_DECL);
         s->decl_type = (SymbolType)(yyvsp[(1) - (5)].symbol_type);
@@ -3287,56 +3547,56 @@ yyreduce:
   case 30:
 
 /* Line 1455 of yacc.c  */
-#line 917 "emotionscript.y"
+#line 1178 "emotionscript.y"
     { (yyval.symbol_type) = SYM_COUNT; ;}
     break;
 
   case 31:
 
 /* Line 1455 of yacc.c  */
-#line 918 "emotionscript.y"
+#line 1179 "emotionscript.y"
     { (yyval.symbol_type) = SYM_MEASURE; ;}
     break;
 
   case 32:
 
 /* Line 1455 of yacc.c  */
-#line 919 "emotionscript.y"
+#line 1180 "emotionscript.y"
     { (yyval.symbol_type) = SYM_TRUTH; ;}
     break;
 
   case 33:
 
 /* Line 1455 of yacc.c  */
-#line 920 "emotionscript.y"
+#line 1181 "emotionscript.y"
     { (yyval.symbol_type) = SYM_WORDS; ;}
     break;
 
   case 34:
 
 /* Line 1455 of yacc.c  */
-#line 921 "emotionscript.y"
+#line 1182 "emotionscript.y"
     { (yyval.symbol_type) = SYM_LEVEL; ;}
     break;
 
   case 35:
 
 /* Line 1455 of yacc.c  */
-#line 922 "emotionscript.y"
+#line 1183 "emotionscript.y"
     { (yyval.symbol_type) = SYM_EMOTION; ;}
     break;
 
   case 36:
 
 /* Line 1455 of yacc.c  */
-#line 923 "emotionscript.y"
+#line 1184 "emotionscript.y"
     { (yyval.symbol_type) = SYM_UNKNOWN; ;}
     break;
 
   case 41:
 
 /* Line 1455 of yacc.c  */
-#line 935 "emotionscript.y"
+#line 1196 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_ASSIGN);
         s->name = strdup((yyvsp[(2) - (5)].string_val));
@@ -3348,7 +3608,7 @@ yyreduce:
   case 42:
 
 /* Line 1455 of yacc.c  */
-#line 942 "emotionscript.y"
+#line 1203 "emotionscript.y"
     {
         (void)(yyvsp[(2) - (7)].string_val);
         (void)(yyvsp[(4) - (7)].string_val);
@@ -3360,7 +3620,7 @@ yyreduce:
   case 43:
 
 /* Line 1455 of yacc.c  */
-#line 952 "emotionscript.y"
+#line 1213 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_EXPR);
         s->expr = (yyvsp[(1) - (2)].expr_ptr);
@@ -3371,189 +3631,197 @@ yyreduce:
   case 44:
 
 /* Line 1455 of yacc.c  */
-#line 960 "emotionscript.y"
+#line 1221 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(1) - (1)].expr_ptr); ;}
     break;
 
   case 45:
 
 /* Line 1455 of yacc.c  */
-#line 961 "emotionscript.y"
+#line 1222 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_POWER, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 46:
 
 /* Line 1455 of yacc.c  */
-#line 962 "emotionscript.y"
+#line 1223 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_MUL, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 47:
 
 /* Line 1455 of yacc.c  */
-#line 963 "emotionscript.y"
+#line 1224 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_DIV, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 48:
 
 /* Line 1455 of yacc.c  */
-#line 964 "emotionscript.y"
+#line 1225 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_MOD, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 49:
 
 /* Line 1455 of yacc.c  */
-#line 965 "emotionscript.y"
+#line 1226 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_PLUS, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 50:
 
 /* Line 1455 of yacc.c  */
-#line 966 "emotionscript.y"
+#line 1227 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_MINUS, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 51:
 
 /* Line 1455 of yacc.c  */
-#line 967 "emotionscript.y"
+#line 1228 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_EQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 52:
 
 /* Line 1455 of yacc.c  */
-#line 968 "emotionscript.y"
+#line 1229 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_NEQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 53:
 
 /* Line 1455 of yacc.c  */
-#line 969 "emotionscript.y"
+#line 1230 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_LT, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 54:
 
 /* Line 1455 of yacc.c  */
-#line 970 "emotionscript.y"
+#line 1231 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_GT, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 55:
 
 /* Line 1455 of yacc.c  */
-#line 971 "emotionscript.y"
+#line 1232 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_LEQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 56:
 
 /* Line 1455 of yacc.c  */
-#line 972 "emotionscript.y"
+#line 1233 "emotionscript.y"
     { (yyval.expr_ptr) = expr_binary(OP_GEQ, (yyvsp[(1) - (3)].expr_ptr), (yyvsp[(3) - (3)].expr_ptr)); ;}
     break;
 
   case 57:
 
 /* Line 1455 of yacc.c  */
-#line 973 "emotionscript.y"
+#line 1234 "emotionscript.y"
     { (yyval.expr_ptr) = expr_prefix(OP_INC, (yyvsp[(2) - (2)].string_val)); ;}
     break;
 
   case 58:
 
 /* Line 1455 of yacc.c  */
-#line 974 "emotionscript.y"
+#line 1235 "emotionscript.y"
     { (yyval.expr_ptr) = expr_prefix(OP_DEC, (yyvsp[(2) - (2)].string_val)); ;}
     break;
 
   case 59:
 
 /* Line 1455 of yacc.c  */
-#line 975 "emotionscript.y"
+#line 1236 "emotionscript.y"
     { (yyval.expr_ptr) = expr_unary_minus((yyvsp[(2) - (2)].expr_ptr)); ;}
     break;
 
   case 60:
 
 /* Line 1455 of yacc.c  */
-#line 979 "emotionscript.y"
+#line 1240 "emotionscript.y"
     { (yyval.expr_ptr) = expr_var((yyvsp[(1) - (1)].string_val)); ;}
     break;
 
   case 61:
 
 /* Line 1455 of yacc.c  */
-#line 980 "emotionscript.y"
+#line 1241 "emotionscript.y"
     { (yyval.expr_ptr) = expr_postfix(OP_INC, (yyvsp[(1) - (2)].string_val)); ;}
     break;
 
   case 62:
 
 /* Line 1455 of yacc.c  */
-#line 981 "emotionscript.y"
+#line 1242 "emotionscript.y"
     { (yyval.expr_ptr) = expr_postfix(OP_DEC, (yyvsp[(1) - (2)].string_val)); ;}
     break;
 
   case 63:
 
 /* Line 1455 of yacc.c  */
-#line 982 "emotionscript.y"
+#line 1243 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 64:
 
 /* Line 1455 of yacc.c  */
-#line 983 "emotionscript.y"
-    { (yyval.expr_ptr) = expr_placeholder_call(); ;}
+#line 1244 "emotionscript.y"
+    {
+        (yyval.expr_ptr) = expr_func_call((yyvsp[(1) - (4)].string_val), (yyvsp[(3) - (4)].func_arg_ptr), count_func_args((yyvsp[(3) - (4)].func_arg_ptr)));
+    ;}
     break;
 
   case 65:
 
 /* Line 1455 of yacc.c  */
-#line 984 "emotionscript.y"
-    { (yyval.expr_ptr) = expr_placeholder_call(); ;}
+#line 1247 "emotionscript.y"
+    {
+        (yyval.expr_ptr) = expr_func_call((yyvsp[(1) - (3)].string_val), NULL, 0);
+    ;}
     break;
 
   case 66:
 
 /* Line 1455 of yacc.c  */
-#line 985 "emotionscript.y"
-    { (yyval.expr_ptr) = expr_placeholder_call(); ;}
+#line 1250 "emotionscript.y"
+    {
+        (yyval.expr_ptr) = expr_func_call((yyvsp[(2) - (5)].string_val), (yyvsp[(4) - (5)].func_arg_ptr), count_func_args((yyvsp[(4) - (5)].func_arg_ptr)));
+    ;}
     break;
 
   case 67:
 
 /* Line 1455 of yacc.c  */
-#line 986 "emotionscript.y"
-    { (yyval.expr_ptr) = expr_placeholder_call(); ;}
+#line 1253 "emotionscript.y"
+    {
+        (yyval.expr_ptr) = expr_func_call((yyvsp[(2) - (4)].string_val), NULL, 0);
+    ;}
     break;
 
   case 68:
 
 /* Line 1455 of yacc.c  */
-#line 987 "emotionscript.y"
+#line 1256 "emotionscript.y"
     { (yyval.expr_ptr) = expr_literal(make_int(atoi((yyvsp[(1) - (1)].string_val)))); ;}
     break;
 
   case 69:
 
 /* Line 1455 of yacc.c  */
-#line 988 "emotionscript.y"
+#line 1257 "emotionscript.y"
     { (yyval.expr_ptr) = expr_literal(make_float(strtod((yyvsp[(1) - (1)].string_val), NULL))); ;}
     break;
 
   case 70:
 
 /* Line 1455 of yacc.c  */
-#line 990 "emotionscript.y"
+#line 1259 "emotionscript.y"
     {
           size_t n = strlen((yyvsp[(1) - (1)].string_val));
           if (n >= 2 && (yyvsp[(1) - (1)].string_val)[0] == '"' && (yyvsp[(1) - (1)].string_val)[n - 1] == '"') {
@@ -3575,199 +3843,237 @@ yyreduce:
   case 71:
 
 /* Line 1455 of yacc.c  */
-#line 1006 "emotionscript.y"
+#line 1275 "emotionscript.y"
     { (yyval.expr_ptr) = expr_literal(make_bool(strcmp((yyvsp[(1) - (1)].string_val), "yes") == 0)); ;}
     break;
 
   case 72:
 
 /* Line 1455 of yacc.c  */
-#line 1007 "emotionscript.y"
+#line 1276 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(2) - (3)].expr_ptr); ;}
     break;
 
   case 73:
 
 /* Line 1455 of yacc.c  */
-#line 1008 "emotionscript.y"
+#line 1277 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(1) - (1)].expr_ptr); ;}
     break;
 
   case 74:
 
 /* Line 1455 of yacc.c  */
-#line 1009 "emotionscript.y"
+#line 1278 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 75:
 
 /* Line 1455 of yacc.c  */
-#line 1014 "emotionscript.y"
+#line 1283 "emotionscript.y"
     {
-        (yyval.stmt_ptr) = new_stmt(ST_NOOP);
+        Stmt *s = new_stmt(ST_FUNC_DECL);
+        s->name = strdup((yyvsp[(2) - (10)].string_val));
+        s->func_return_type = (SymbolType)(yyvsp[(7) - (10)].symbol_type);
+        s->func_param_count = temp_param_count;
+        
+        if (temp_param_count > 0) {
+            s->func_param_names = (char **)malloc(temp_param_count * sizeof(char *));
+            s->func_param_types = (SymbolType *)malloc(temp_param_count * sizeof(SymbolType));
+            for (int i = 0; i < temp_param_count; i++) {
+                s->func_param_names[i] = temp_param_names[i];
+                s->func_param_types[i] = temp_param_types[i];
+            }
+        } else {
+            s->func_param_names = NULL;
+            s->func_param_types = NULL;
+        }
+        s->func_body = (yyvsp[(9) - (10)].block_ptr);
+        temp_param_count = 0;
+        (yyval.stmt_ptr) = s;
     ;}
     break;
 
   case 76:
 
 /* Line 1455 of yacc.c  */
-#line 1018 "emotionscript.y"
+#line 1305 "emotionscript.y"
     {
-        (yyval.stmt_ptr) = new_stmt(ST_NOOP);
+        Stmt *s = new_stmt(ST_FUNC_DECL);
+        s->name = strdup((yyvsp[(2) - (9)].string_val));
+        s->func_return_type = (SymbolType)(yyvsp[(6) - (9)].symbol_type);
+        s->func_param_names = NULL;
+        s->func_param_types = NULL;
+        s->func_param_count = 0;
+        s->func_body = (yyvsp[(8) - (9)].block_ptr);
+        temp_param_count = 0;
+        (yyval.stmt_ptr) = s;
     ;}
     break;
 
   case 77:
 
 /* Line 1455 of yacc.c  */
-#line 1024 "emotionscript.y"
+#line 1319 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 78:
 
 /* Line 1455 of yacc.c  */
-#line 1025 "emotionscript.y"
+#line 1320 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (3)].block_ptr); ;}
     break;
 
   case 79:
 
 /* Line 1455 of yacc.c  */
-#line 1030 "emotionscript.y"
+#line 1325 "emotionscript.y"
     {
-        (void)(yyvsp[(1) - (2)].symbol_type);
-        (void)(yyvsp[(2) - (2)].string_val);
+        if (temp_param_count < MAX_PARAMS) {
+            temp_param_names[temp_param_count] = strdup((yyvsp[(2) - (2)].string_val));
+            temp_param_types[temp_param_count] = (SymbolType)(yyvsp[(1) - (2)].symbol_type);
+            temp_param_count++;
+        }
     ;}
     break;
 
   case 80:
 
 /* Line 1455 of yacc.c  */
-#line 1037 "emotionscript.y"
+#line 1335 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 81:
 
 /* Line 1455 of yacc.c  */
-#line 1042 "emotionscript.y"
+#line 1340 "emotionscript.y"
     {
-        (void)(yyvsp[(2) - (3)].expr_ptr);
-        (yyval.stmt_ptr) = new_stmt(ST_NOOP);
+        Stmt *s = new_stmt(ST_RETURN);
+        s->expr = (yyvsp[(2) - (3)].expr_ptr);
+        (yyval.stmt_ptr) = s;
     ;}
     break;
 
   case 82:
 
 /* Line 1455 of yacc.c  */
-#line 1049 "emotionscript.y"
-    { (yyval.block_ptr) = new_block(); ;}
+#line 1348 "emotionscript.y"
+    { 
+        (yyval.func_arg_ptr) = new_func_arg((yyvsp[(1) - (1)].expr_ptr));
+    ;}
     break;
 
   case 83:
 
 /* Line 1455 of yacc.c  */
-#line 1050 "emotionscript.y"
-    { (yyval.block_ptr) = (yyvsp[(1) - (3)].block_ptr); ;}
+#line 1351 "emotionscript.y"
+    { 
+        FunctionArg *arg = new_func_arg((yyvsp[(3) - (3)].expr_ptr));
+        FunctionArg *tail = (yyvsp[(1) - (3)].func_arg_ptr);
+        while (tail->next) tail = tail->next;
+        tail->next = arg;
+        (yyval.func_arg_ptr) = (yyvsp[(1) - (3)].func_arg_ptr);
+    ;}
     break;
 
   case 84:
 
 /* Line 1455 of yacc.c  */
-#line 1054 "emotionscript.y"
+#line 1361 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 85:
 
 /* Line 1455 of yacc.c  */
-#line 1055 "emotionscript.y"
+#line 1362 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 86:
 
 /* Line 1455 of yacc.c  */
-#line 1056 "emotionscript.y"
+#line 1363 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 87:
 
 /* Line 1455 of yacc.c  */
-#line 1057 "emotionscript.y"
+#line 1364 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 88:
 
 /* Line 1455 of yacc.c  */
-#line 1058 "emotionscript.y"
+#line 1365 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 89:
 
 /* Line 1455 of yacc.c  */
-#line 1059 "emotionscript.y"
+#line 1366 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 90:
 
 /* Line 1455 of yacc.c  */
-#line 1060 "emotionscript.y"
+#line 1367 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 91:
 
 /* Line 1455 of yacc.c  */
-#line 1061 "emotionscript.y"
+#line 1368 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 92:
 
 /* Line 1455 of yacc.c  */
-#line 1062 "emotionscript.y"
+#line 1369 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 93:
 
 /* Line 1455 of yacc.c  */
-#line 1063 "emotionscript.y"
+#line 1370 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 94:
 
 /* Line 1455 of yacc.c  */
-#line 1064 "emotionscript.y"
+#line 1371 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 95:
 
 /* Line 1455 of yacc.c  */
-#line 1065 "emotionscript.y"
+#line 1372 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 96:
 
 /* Line 1455 of yacc.c  */
-#line 1066 "emotionscript.y"
+#line 1373 "emotionscript.y"
     { (yyval.expr_ptr) = expr_placeholder_call(); ;}
     break;
 
   case 97:
 
 /* Line 1455 of yacc.c  */
-#line 1071 "emotionscript.y"
+#line 1378 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (4)].expr_ptr);
@@ -3779,7 +4085,7 @@ yyreduce:
   case 98:
 
 /* Line 1455 of yacc.c  */
-#line 1078 "emotionscript.y"
+#line 1385 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (5)].expr_ptr);
@@ -3792,7 +4098,7 @@ yyreduce:
   case 99:
 
 /* Line 1455 of yacc.c  */
-#line 1086 "emotionscript.y"
+#line 1393 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (6)].expr_ptr);
@@ -3805,7 +4111,7 @@ yyreduce:
   case 100:
 
 /* Line 1455 of yacc.c  */
-#line 1094 "emotionscript.y"
+#line 1401 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IF);
         s->condition = (yyvsp[(2) - (7)].expr_ptr);
@@ -3819,28 +4125,28 @@ yyreduce:
   case 101:
 
 /* Line 1455 of yacc.c  */
-#line 1102 "emotionscript.y"
+#line 1409 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 102:
 
 /* Line 1455 of yacc.c  */
-#line 1103 "emotionscript.y"
+#line 1410 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 103:
 
 /* Line 1455 of yacc.c  */
-#line 1107 "emotionscript.y"
+#line 1414 "emotionscript.y"
     { (yyval.expr_ptr) = (yyvsp[(1) - (1)].expr_ptr); ;}
     break;
 
   case 104:
 
 /* Line 1455 of yacc.c  */
-#line 1112 "emotionscript.y"
+#line 1419 "emotionscript.y"
     {
         (yyval.branch_ptr) = new_branch((yyvsp[(2) - (3)].expr_ptr), (yyvsp[(3) - (3)].block_ptr));
     ;}
@@ -3849,7 +4155,7 @@ yyreduce:
   case 105:
 
 /* Line 1455 of yacc.c  */
-#line 1116 "emotionscript.y"
+#line 1423 "emotionscript.y"
     {
         (yyval.branch_ptr) = append_branch((yyvsp[(1) - (4)].branch_ptr), new_branch((yyvsp[(3) - (4)].expr_ptr), (yyvsp[(4) - (4)].block_ptr)));
     ;}
@@ -3858,7 +4164,7 @@ yyreduce:
   case 106:
 
 /* Line 1455 of yacc.c  */
-#line 1123 "emotionscript.y"
+#line 1430 "emotionscript.y"
     {
         (void)(yyvsp[(3) - (7)].expr_ptr);
         (void)(yyvsp[(6) - (7)].block_ptr);
@@ -3869,21 +4175,21 @@ yyreduce:
   case 107:
 
 /* Line 1455 of yacc.c  */
-#line 1131 "emotionscript.y"
+#line 1438 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 108:
 
 /* Line 1455 of yacc.c  */
-#line 1132 "emotionscript.y"
+#line 1439 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
   case 112:
 
 /* Line 1455 of yacc.c  */
-#line 1143 "emotionscript.y"
+#line 1450 "emotionscript.y"
     {
         (void)(yyvsp[(2) - (5)].expr_ptr);
         (void)(yyvsp[(3) - (5)].block_ptr);
@@ -3894,42 +4200,42 @@ yyreduce:
   case 113:
 
 /* Line 1455 of yacc.c  */
-#line 1151 "emotionscript.y"
+#line 1458 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 114:
 
 /* Line 1455 of yacc.c  */
-#line 1152 "emotionscript.y"
+#line 1459 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
   case 115:
 
 /* Line 1455 of yacc.c  */
-#line 1153 "emotionscript.y"
+#line 1460 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
   case 116:
 
 /* Line 1455 of yacc.c  */
-#line 1157 "emotionscript.y"
+#line 1464 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(3) - (3)].block_ptr); ;}
     break;
 
   case 117:
 
 /* Line 1455 of yacc.c  */
-#line 1161 "emotionscript.y"
+#line 1468 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(2) - (2)].block_ptr); ;}
     break;
 
   case 118:
 
 /* Line 1455 of yacc.c  */
-#line 1166 "emotionscript.y"
+#line 1473 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_WHILE);
         s->condition = (yyvsp[(2) - (4)].expr_ptr);
@@ -3941,7 +4247,7 @@ yyreduce:
   case 119:
 
 /* Line 1455 of yacc.c  */
-#line 1173 "emotionscript.y"
+#line 1480 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_FOR);
         s->for_init = (yyvsp[(3) - (9)].stmt_ptr);
@@ -3955,14 +4261,14 @@ yyreduce:
   case 120:
 
 /* Line 1455 of yacc.c  */
-#line 1181 "emotionscript.y"
+#line 1488 "emotionscript.y"
     { (yyval.stmt_ptr) = (yyvsp[(1) - (1)].stmt_ptr); ;}
     break;
 
   case 121:
 
 /* Line 1455 of yacc.c  */
-#line 1186 "emotionscript.y"
+#line 1493 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_WHILE);
         s->condition = (yyvsp[(3) - (6)].expr_ptr);
@@ -3974,21 +4280,21 @@ yyreduce:
   case 122:
 
 /* Line 1455 of yacc.c  */
-#line 1195 "emotionscript.y"
+#line 1502 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_BREAK); ;}
     break;
 
   case 123:
 
 /* Line 1455 of yacc.c  */
-#line 1196 "emotionscript.y"
+#line 1503 "emotionscript.y"
     { (yyval.stmt_ptr) = new_stmt(ST_CONTINUE); ;}
     break;
 
   case 124:
 
 /* Line 1455 of yacc.c  */
-#line 1201 "emotionscript.y"
+#line 1508 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IO_SPEAK);
         s->expr = (yyvsp[(3) - (5)].expr_ptr);
@@ -3999,7 +4305,7 @@ yyreduce:
   case 125:
 
 /* Line 1455 of yacc.c  */
-#line 1207 "emotionscript.y"
+#line 1514 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IO_LISTEN);
         s->name = strdup((yyvsp[(3) - (5)].string_val));
@@ -4010,7 +4316,7 @@ yyreduce:
   case 126:
 
 /* Line 1455 of yacc.c  */
-#line 1213 "emotionscript.y"
+#line 1520 "emotionscript.y"
     {
         Stmt *s = new_stmt(ST_IO_ALERT);
         s->expr = (yyvsp[(3) - (5)].expr_ptr);
@@ -4021,35 +4327,35 @@ yyreduce:
   case 129:
 
 /* Line 1455 of yacc.c  */
-#line 1226 "emotionscript.y"
+#line 1533 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 130:
 
 /* Line 1455 of yacc.c  */
-#line 1227 "emotionscript.y"
+#line 1534 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (1)].block_ptr); ;}
     break;
 
   case 131:
 
 /* Line 1455 of yacc.c  */
-#line 1231 "emotionscript.y"
+#line 1538 "emotionscript.y"
     { (yyval.block_ptr) = new_block(); ;}
     break;
 
   case 132:
 
 /* Line 1455 of yacc.c  */
-#line 1232 "emotionscript.y"
+#line 1539 "emotionscript.y"
     { (yyval.block_ptr) = (yyvsp[(1) - (2)].block_ptr); ;}
     break;
 
 
 
 /* Line 1455 of yacc.c  */
-#line 4053 "emotionscript.tab.c"
+#line 4359 "emotionscript.tab.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -4261,7 +4567,7 @@ yyreturn:
 
 
 /* Line 1675 of yacc.c  */
-#line 1269 "emotionscript.y"
+#line 1576 "emotionscript.y"
 
 
 void yyerror(const char *s) {
@@ -4273,6 +4579,10 @@ int main(int argc, char **argv) {
     int result;
 
     icg_reset();
+    
+    /* Initialize global scope for functions */
+    global_function_table = func_table_create();
+    current_scope = scope_create(NULL);
 
     if (argc < 3) {
         printf("Usage: %s <input.tokens> <output.syntax>\n", argv[0]);
@@ -4311,6 +4621,8 @@ int main(int argc, char **argv) {
     fclose(yyin);
     fclose(yyout);
     free_symbol_table();
+    if (global_function_table) func_table_free(global_function_table);
+    if (current_scope) scope_free(current_scope);
 
     return result;
 }

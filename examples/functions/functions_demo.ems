@@ -1,0 +1,14 @@
+mind FunctionDemo awake
+
+interpret multiply(count x, count y) yields count <<
+    reflect x * y;
+>>
+
+interpret add(count a, count b) yields count <<
+    reflect a + b;
+>>
+
+invoke multiply(3, 7);
+invoke add(10, 20);
+
+sleep

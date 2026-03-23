@@ -1,0 +1,9 @@
+mind TestFunction awake
+
+interpret add(count a, count b) yields count <<
+    reflect a + b;
+>>
+
+invoke add(5, 6);
+
+sleep
