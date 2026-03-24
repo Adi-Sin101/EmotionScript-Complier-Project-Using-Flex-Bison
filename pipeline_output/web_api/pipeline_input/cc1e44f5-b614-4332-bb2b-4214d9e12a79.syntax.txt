@@ -1,0 +1,23 @@
+=== EmotionScript Syntax + Execution Engine ===
+
+✓ Valid EmotionScript program
+
+=== PARSE: SUCCESS ===
+✓ No syntax errors found
+✓ Program structure is valid
+✓ TAC written to E:\3-2\LAB\COMPLIER\EmotionScript\pipeline_output\web_api\pipeline_input\cc1e44f5-b614-4332-bb2b-4214d9e12a79.tac
+
+=== EXECUTION TRACE ===
+[TRACE] declare count i
+[TRACE] assign i = 0
+[TRACE] replay check #0 => true
+[SPEAK] 0
+[TRACE] inc i => 1
+[TRACE] replay check #1 => true
+[SPEAK] 1
+[TRACE] inc i => 2
+[TRACE] replay check #2 => true
+[SPEAK] 2
+[TRACE] inc i => 3
+[TRACE] replay check #3 => false
+=== EXECUTION COMPLETE ===

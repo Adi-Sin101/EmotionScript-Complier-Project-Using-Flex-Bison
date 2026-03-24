@@ -1,0 +1,5 @@
+[TRACE] persona Student registered
+[TRACE] instantiate s1 as Student
+✗ Semantic Error at line 31:
+Cannot invoke private method 's1.greet'
+[TRACE] invoke s1.greet => <undef>

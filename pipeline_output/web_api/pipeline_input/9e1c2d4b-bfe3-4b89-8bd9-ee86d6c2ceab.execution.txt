@@ -1,0 +1,8 @@
+[TRACE] persona Human registered
+[TRACE] persona Student registered with inheritance
+[TRACE] instantiate s1 as Student
+✗ Semantic Error at line 33:
+Cannot access private member 's1.age'
+✗ Semantic Error at line 33:
+Cannot access private member 's1.age'
+[SPEAK] <undef>

@@ -1,0 +1,29 @@
+=== EmotionScript Syntax + Execution Engine ===
+
+✓ Valid EmotionScript program
+
+=== PARSE: SUCCESS ===
+✓ No syntax errors found
+✓ Program structure is valid
+✓ TAC written to E:\3-2\LAB\COMPLIER\EmotionScript\pipeline_output\web_api\pipeline_input\921b6dae-c10b-4d78-946d-9ce55a006f08.tac
+
+=== EXECUTION TRACE ===
+[TRACE] persona Human registered
+[TRACE] persona Student registered with inheritance
+[TRACE] persona Teacher registered with inheritance
+[TRACE] instantiate student1 as Student
+[TRACE] instantiate teacher1 as Teacher
+✗ Semantic Error at line 77:
+Cannot access private member 'student1.id'
+✗ Semantic Error at line 77:
+Cannot access private member 'student1.name'
+[TRACE] assign teacher1.teacherId = 501
+✗ Semantic Error at line 77:
+Cannot access private member 'teacher1.subject'
+✗ Semantic Error at line 77:
+Cannot invoke private method 'student1.speak'
+[TRACE] invoke student1.speak => <undef>
+✗ Semantic Error at line 77:
+Cannot invoke private method 'teacher1.speak'
+[TRACE] invoke teacher1.speak => <undef>
+=== EXECUTION COMPLETE ===

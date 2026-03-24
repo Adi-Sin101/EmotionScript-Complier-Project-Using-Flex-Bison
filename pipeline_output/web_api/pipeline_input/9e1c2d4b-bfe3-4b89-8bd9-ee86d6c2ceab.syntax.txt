@@ -1,0 +1,19 @@
+=== EmotionScript Syntax + Execution Engine ===
+
+✓ Valid EmotionScript program
+
+=== PARSE: SUCCESS ===
+✓ No syntax errors found
+✓ Program structure is valid
+✓ TAC written to E:\3-2\LAB\COMPLIER\EmotionScript\pipeline_output\web_api\pipeline_input\9e1c2d4b-bfe3-4b89-8bd9-ee86d6c2ceab.tac
+
+=== EXECUTION TRACE ===
+[TRACE] persona Human registered
+[TRACE] persona Student registered with inheritance
+[TRACE] instantiate s1 as Student
+✗ Semantic Error at line 33:
+Cannot access private member 's1.age'
+✗ Semantic Error at line 33:
+Cannot access private member 's1.age'
+[SPEAK] <undef>
+=== EXECUTION COMPLETE ===

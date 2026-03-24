@@ -1,0 +1,5 @@
+[TRACE] declare count x
+[TRACE] init x = 4
+[TRACE] if_feel condition => true
+[TRACE] if_feel condition => true
+[SPEAK] inner true

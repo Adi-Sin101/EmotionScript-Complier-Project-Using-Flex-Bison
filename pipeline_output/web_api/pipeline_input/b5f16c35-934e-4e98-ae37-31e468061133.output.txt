@@ -1,0 +1,4 @@
+[SPEAK] 0
+[SPEAK] 1
+[SPEAK] 2
+[SPEAK] low

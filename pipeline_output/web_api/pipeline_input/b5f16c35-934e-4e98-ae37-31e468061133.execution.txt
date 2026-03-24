@@ -1,0 +1,17 @@
+[TRACE] declare count i
+[TRACE] declare count score
+[TRACE] init score = 2
+[TRACE] assign i = 0
+[TRACE] replay check #0 => true
+[SPEAK] 0
+[TRACE] inc i => 1
+[TRACE] replay check #1 => true
+[SPEAK] 1
+[TRACE] inc i => 2
+[TRACE] replay check #2 => true
+[SPEAK] 2
+[TRACE] inc i => 3
+[TRACE] replay check #3 => false
+[TRACE] if_feel condition => false
+[TRACE] else_feel branch taken
+[SPEAK] low

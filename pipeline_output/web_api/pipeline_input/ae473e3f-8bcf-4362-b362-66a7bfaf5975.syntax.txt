@@ -1,0 +1,22 @@
+=== EmotionScript Syntax + Execution Engine ===
+
+✗ Syntax Error at line 23:
+syntax error, unexpected CLASS_OPEN, expecting FUNC_DECLARE
+Near token: 'open'
+✗ Syntax Error at line 29:
+syntax error, unexpected DELIM_RSHIFT
+Near token: '>>'
+✗ Syntax Error at line 29:
+Recovered from invalid statement using panic-mode synchronization
+Near token: '>>'
+✗ Syntax Error at line 31:
+syntax error, unexpected DELIM_RSHIFT
+Near token: '>>'
+✗ Syntax Error at line 31:
+Recovered from invalid statement using panic-mode synchronization
+Near token: '>>'
+✓ Valid EmotionScript program
+
+=== PARSE: FAILED ===
+✗ Found 5 syntax error(s)
+✗ Please fix the errors and try again

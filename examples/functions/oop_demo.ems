@@ -1,38 +1,22 @@
-mind TestOOP
+mind OopDemo
 awake
 
 persona Human <<
-    interpret speak(words msg) yields truth <<
-        IO_SPEAK("Human says: " + msg);
+    open interpret greet(words msg) yields truth <<
+        speak("Human says: " + msg);
         reflect yes;
     >>
->>
-
-persona Student evolves_from Human <<
-    count id;
-    words name;
 >>
 
 persona Teacher evolves_from Human <<
-    open count teacherId;
-    words subject;
-
-    reshape interpret speak(words msg) yields truth <<
-        IO_SPEAK("Teacher says: " + msg);
+    reshape open interpret greet(words msg) yields truth <<
+        speak("Teacher says: " + msg);
         reflect yes;
     >>
 >>
 
-Student student1;
-Teacher teacher1;
-
-set student1.id -> 101;
-set student1.name -> "Alice";
-
-set teacher1.teacherId -> 501;
-set teacher1.subject -> "Math";
-
-invoke student1.speak("Hello from student!");
-invoke teacher1.speak("Hello from teacher!");
+Teacher t1;
+invoke t1.greet("Hello from class!");
+speak("OOP demo complete");
 
 sleep;

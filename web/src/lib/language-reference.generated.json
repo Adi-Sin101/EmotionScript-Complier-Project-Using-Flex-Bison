@@ -1,0 +1,464 @@
+{
+  "generatedAt": "2026-03-23T23:59:31.192Z",
+  "keywordSections": [
+    {
+      "title": "Program Structure",
+      "id": "program-structure-keywords",
+      "rows": [
+        {
+          "keyword": "abort",
+          "purpose": "Terminate execution",
+          "equivalent": "exit",
+          "status": "active"
+        },
+        {
+          "keyword": "awake",
+          "purpose": "Begin main block",
+          "equivalent": "{",
+          "status": "active"
+        },
+        {
+          "keyword": "mind",
+          "purpose": "Program start token",
+          "equivalent": "entry point",
+          "status": "active"
+        },
+        {
+          "keyword": "scene",
+          "purpose": "Named scope block",
+          "equivalent": "scope",
+          "status": "active"
+        },
+        {
+          "keyword": "sleep",
+          "purpose": "End main block",
+          "equivalent": "}",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "title": "Declarations and Types",
+      "id": "declarations-and-types-keywords",
+      "rows": [
+        {
+          "keyword": "memory",
+          "purpose": "Persistent variable",
+          "equivalent": "state",
+          "status": "active"
+        },
+        {
+          "keyword": "state",
+          "purpose": "State declaration",
+          "equivalent": "state",
+          "status": "active"
+        },
+        {
+          "keyword": "thought",
+          "purpose": "Variable declaration",
+          "equivalent": "let/var",
+          "status": "active"
+        },
+        {
+          "keyword": "trait",
+          "purpose": "Persona member declaration",
+          "equivalent": "field",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "title": "Types",
+      "id": "types-keywords",
+      "rows": [
+        {
+          "keyword": "count",
+          "purpose": "Integer type",
+          "equivalent": "int",
+          "status": "active"
+        },
+        {
+          "keyword": "emotion",
+          "purpose": "Emotion domain type",
+          "equivalent": "custom",
+          "status": "active"
+        },
+        {
+          "keyword": "level",
+          "purpose": "Level domain type",
+          "equivalent": "custom",
+          "status": "active"
+        },
+        {
+          "keyword": "measure",
+          "purpose": "Floating type",
+          "equivalent": "float",
+          "status": "active"
+        },
+        {
+          "keyword": "truth",
+          "purpose": "Boolean type",
+          "equivalent": "bool",
+          "status": "active"
+        },
+        {
+          "keyword": "words",
+          "purpose": "String type",
+          "equivalent": "string",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "title": "Control Flow",
+      "id": "control-flow-keywords",
+      "rows": [
+        {
+          "keyword": "calm",
+          "purpose": "End while loop",
+          "equivalent": "end while",
+          "status": "active"
+        },
+        {
+          "keyword": "decide",
+          "purpose": "Switch-like branch",
+          "equivalent": "switch",
+          "status": "active"
+        },
+        {
+          "keyword": "else_feel",
+          "purpose": "Fallback branch",
+          "equivalent": "else",
+          "status": "active"
+        },
+        {
+          "keyword": "else_if_feel",
+          "purpose": "Secondary branch",
+          "equivalent": "else if",
+          "status": "active"
+        },
+        {
+          "keyword": "end_decision",
+          "purpose": "End decision block",
+          "equivalent": "end switch",
+          "status": "active"
+        },
+        {
+          "keyword": "end_feel",
+          "purpose": "End conditional",
+          "equivalent": "endif",
+          "status": "active"
+        },
+        {
+          "keyword": "if_feel",
+          "purpose": "Conditional branch",
+          "equivalent": "if",
+          "status": "active"
+        },
+        {
+          "keyword": "otherwise",
+          "purpose": "Default branch",
+          "equivalent": "default",
+          "status": "active"
+        },
+        {
+          "keyword": "when",
+          "purpose": "Decision branch",
+          "equivalent": "case",
+          "status": "active"
+        },
+        {
+          "keyword": "while_feeling",
+          "purpose": "While loop",
+          "equivalent": "while",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "title": "Functions and I/O",
+      "id": "functions-and-i-o-keywords",
+      "rows": [
+        {
+          "keyword": "alert",
+          "purpose": "Emit alert",
+          "equivalent": "warn/log",
+          "status": "active"
+        },
+        {
+          "keyword": "listen",
+          "purpose": "Read input",
+          "equivalent": "input",
+          "status": "active"
+        },
+        {
+          "keyword": "speak",
+          "purpose": "Output text/value",
+          "equivalent": "print",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "title": "Other",
+      "id": "other-keywords",
+      "rows": [
+        {
+          "keyword": "arccosine",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "arcsine",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "arctangent",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "balance",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "break_free",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "composed_of",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "continue_flow",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "cosine",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "current_emotion",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "end_interpret",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "reserved"
+        },
+        {
+          "keyword": "end_ruminate",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "estimate_down",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "estimate_up",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "evolves_from",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "gap",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "interpret",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "invoke",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "IO_ALERT",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "IO_LISTEN",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "IO_SPEAK",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "magnitude",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "manifest",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "reserved"
+        },
+        {
+          "keyword": "normalize",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "reflect",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "replay",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "reshape",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "ruminate",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "set",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "shared",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "sine",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "surge",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "tangent",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "trigger",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        },
+        {
+          "keyword": "yields",
+          "purpose": "Language token",
+          "equivalent": "-",
+          "status": "active"
+        }
+      ]
+    }
+  ],
+  "operators": {
+    "arithmetic": [
+      {
+        "operation": "Addition",
+        "keyword": "+",
+        "symbol": "+"
+      },
+      {
+        "operation": "Subtraction",
+        "keyword": "-",
+        "symbol": "-"
+      },
+      {
+        "operation": "Multiplication",
+        "keyword": "*",
+        "symbol": "*"
+      },
+      {
+        "operation": "Division",
+        "keyword": "/",
+        "symbol": "/"
+      },
+      {
+        "operation": "Modulo",
+        "keyword": "%",
+        "symbol": "%"
+      },
+      {
+        "operation": "Power",
+        "keyword": "**",
+        "symbol": "**"
+      }
+    ],
+    "comparisons": [
+      "<",
+      ">",
+      "<=",
+      ">=",
+      "==",
+      "!="
+    ],
+    "logical": [
+      "and",
+      "or",
+      "not",
+      "xor"
+    ]
+  },
+  "notes": {
+    "reservedMeaning": "Reserved tokens are recognized by the lexer but currently have no grammar production in the parser."
+  }
+}

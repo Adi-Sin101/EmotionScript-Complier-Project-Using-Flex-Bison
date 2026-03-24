@@ -1,0 +1,16 @@
+=== EmotionScript Syntax + Execution Engine ===
+
+✓ Valid EmotionScript program
+
+=== PARSE: SUCCESS ===
+✓ No syntax errors found
+✓ Program structure is valid
+✓ TAC written to E:\3-2\LAB\COMPLIER\EmotionScript\pipeline_output\web_api\pipeline_input\12b0961e-080a-4e62-ae7d-4669b4fb1853.tac
+
+=== EXECUTION TRACE ===
+[TRACE] persona Student registered
+[TRACE] instantiate s1 as Student
+✗ Semantic Error at line 31:
+Cannot invoke private method 's1.greet'
+[TRACE] invoke s1.greet => <undef>
+=== EXECUTION COMPLETE ===

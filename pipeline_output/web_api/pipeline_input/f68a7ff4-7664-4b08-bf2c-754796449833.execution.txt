@@ -1,0 +1,7 @@
+[TRACE] persona Student registered
+[TRACE] instantiate s1 as Student
+✗ Semantic Error at line 27:
+Cannot access private member 's1.id'
+✗ Semantic Error at line 27:
+Cannot access private member 's1.id'
+[SPEAK] <undef>

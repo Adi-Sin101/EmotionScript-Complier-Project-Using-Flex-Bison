@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f1119;
+  --foreground: #f2f4fb;
+  --primary: #4c61ff;
+  --primary-soft: #8da2ff;
+  --surface: #171b2a;
+  --surface-2: #1f2537;
+  --ring: #8ea0ff;
+  --background-dark: #0f1119;
+  --background-light: #f2f4fb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-background-dark: var(--background-dark);
+  --color-background-light: var(--background-light);
+  --font-sans: var(--font-manrope);
+  --font-display: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.docs-cosmic-bg {
+  background:
+    radial-gradient(860px 520px at 82% -12%, rgb(76 97 255 / 0.16), transparent 60%),
+    radial-gradient(700px 430px at 10% -10%, rgb(65 192 255 / 0.12), transparent 64%),
+    linear-gradient(180deg, #10131e 0%, #0f1119 48%, #0f121d 100%);
+}
+
+.docs-cosmic-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 22%, rgb(255 255 255 / 0.08) 0, transparent 1.5px),
+    radial-gradient(circle at 72% 14%, rgb(255 255 255 / 0.06) 0, transparent 1.2px),
+    radial-gradient(circle at 62% 78%, rgb(255 255 255 / 0.06) 0, transparent 1.4px),
+    radial-gradient(circle at 8% 70%, rgb(255 255 255 / 0.05) 0, transparent 1.2px);
+  background-size: 600px 380px;
+  opacity: 0.5;
+}
+
+.docs-cosmic-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 40%, rgb(44 44 226 / 0.04) 60%, transparent 82%);
+  mix-blend-mode: screen;
+}
+
+* {
+  scrollbar-color: rgb(124 137 255 / 0.4) transparent;
+}
+
+* {
+  border-color: rgb(255 255 255 / 0.08);
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition: color 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.subtle-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

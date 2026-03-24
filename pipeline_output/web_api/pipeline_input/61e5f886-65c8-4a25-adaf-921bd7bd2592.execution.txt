@@ -1,0 +1,7 @@
+[TRACE] function add declared
+[TRACE] bind parameter a = 1
+[TRACE] bind parameter b = 2
+[TRACE] declare count c
+[TRACE] init c = 3
+[TRACE] reflect 3
+[TRACE] invoke add => 3

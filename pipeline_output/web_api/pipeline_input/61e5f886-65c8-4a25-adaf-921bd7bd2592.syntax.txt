@@ -1,0 +1,18 @@
+=== EmotionScript Syntax + Execution Engine ===
+
+✓ Valid EmotionScript program
+
+=== PARSE: SUCCESS ===
+✓ No syntax errors found
+✓ Program structure is valid
+✓ TAC written to E:\3-2\LAB\COMPLIER\EmotionScript\pipeline_output\web_api\pipeline_input\61e5f886-65c8-4a25-adaf-921bd7bd2592.tac
+
+=== EXECUTION TRACE ===
+[TRACE] function add declared
+[TRACE] bind parameter a = 1
+[TRACE] bind parameter b = 2
+[TRACE] declare count c
+[TRACE] init c = 3
+[TRACE] reflect 3
+[TRACE] invoke add => 3
+=== EXECUTION COMPLETE ===

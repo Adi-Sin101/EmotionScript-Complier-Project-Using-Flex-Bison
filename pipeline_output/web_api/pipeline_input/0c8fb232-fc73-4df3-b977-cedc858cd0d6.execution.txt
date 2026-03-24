@@ -1,0 +1,4 @@
+[TRACE] declare truth canRun
+[TRACE] init canRun = yes
+[TRACE] if_feel condition => true
+[SPEAK] branch: if
